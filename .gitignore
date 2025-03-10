@@ -1,0 +1,8 @@
+TODO
+
+.DS_Store
+/rollups-avail-reader
+*.sqlite3
+sqlite3
+.idea/
+.direnv/

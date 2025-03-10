@@ -1,0 +1,49 @@
+name: CI
+
+on: push
+
+permissions:
+  contents: write
+
+env:
+  ANVIL_TAG: nightly-2cdbfaca634b284084d0f86357623aef7a0d2ce3
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.ANVIL_TAG }}
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          args: --timeout=5m --out-format=colored-line-number
+          version: latest
+
+      - name: Check generate
+        run: make check-gen
+
+      - name: Build
+        run: make build
+
+      # - name: Run node v2 database
+      #   run: make up-db-raw
+
+      - name: Test
+        run: make test
+
+  

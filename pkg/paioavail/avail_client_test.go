@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/calindra/rollups-avail-reader/pkg/devnet"
+	"github.com/calindra/rollups-base-reader/pkg/devnet"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
 	"github.com/stretchr/testify/suite"
 )

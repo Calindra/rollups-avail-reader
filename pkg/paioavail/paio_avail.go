@@ -17,7 +17,7 @@ import (
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcutil/hdkeychain"
-	"github.com/calindra/rollups-avail-reader/pkg/paiodecoder"
+	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/cartesi/rollups-graphql/pkg/commons"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/signature"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"

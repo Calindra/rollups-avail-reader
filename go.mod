@@ -1,19 +1,20 @@
 module github.com/calindra/rollups-avail-reader
 
-go 1.22.6
+go 1.23.0
 
 toolchain go1.23.7
 
 require (
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
+	github.com/calindra/rollups-base-reader v0.0.0-20250311172200-87125ca97274
 	github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85
 	github.com/centrifuge/go-substrate-rpc-client/v4 v4.2.1
 	github.com/cosmos/go-bip39 v1.0.0
-	github.com/ethereum/go-ethereum v1.15.2
+	github.com/ethereum/go-ethereum v1.15.5
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/ncruces/go-sqlite3 v0.16.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 )
 
 require (
@@ -35,6 +36,7 @@ require (
 	github.com/ethereum/go-verkle v0.2.2 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
@@ -57,7 +59,6 @@ require (
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/vedhavyas/go-subkey/v2 v2.0.0 // indirect
 	golang.org/x/crypto v0.32.0 // indirect
-	golang.org/x/exp v0.0.0-20231206192017-f3f8817b8deb // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect

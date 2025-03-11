@@ -1,7 +1,7 @@
 // (c) Cartesi and individual authors (see AUTHORS)
 // SPDX-License-Identifier: Apache-2.0 (see LICENSE)
 
-package inputter
+package inputreader
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type InputterTestSuite struct {
+type InputReaderTestSuite struct {
 	suite.Suite
 	ctx           context.Context
 	workerCtx     context.Context
@@ -29,7 +29,7 @@ type InputterTestSuite struct {
 	rpcUrl        string
 }
 
-func (s *InputterTestSuite) SetupTest() {
+func (s *InputReaderTestSuite) SetupTest() {
 	commons.ConfigureLog(slog.LevelDebug)
 	slog.Debug("Setup!!!")
 	var w supervisor.SupervisorWorker
@@ -63,7 +63,7 @@ func (s *InputterTestSuite) SetupTest() {
 	}
 }
 
-func (s *InputterTestSuite) TestReadInputsByBlockAndTimestamp() {
+func (s *InputReaderTestSuite) TestFindAllInputsByBlockAndTimestampLT() {
 	client, err := ethclient.DialContext(s.ctx, "http://127.0.0.1:8545")
 	s.NoError(err)
 	appAddress := common.HexToAddress(devnet.ApplicationAddress)
@@ -75,33 +75,7 @@ func (s *InputterTestSuite) TestReadInputsByBlockAndTimestamp() {
 	s.NoError(err)
 	l1FinalizedPrevHeight := uint64(1)
 	timestamp := uint64(time.Now().UnixMilli())
-	w := InputterWorker{
-		Model:              nil,
-		Provider:           "",
-		InputBoxAddress:    inputBoxAddress,
-		InputBoxBlock:      1,
-		ApplicationAddress: appAddress,
-	}
-
-	lastL1BlockRead, err := w.ReadInputsByBlockAndTimestamp(ctx, client, inputBox, l1FinalizedPrevHeight, (timestamp/1000)-300)
-	s.NoError(err)
-	s.NotNil(lastL1BlockRead)
-	s.Equal(1, int(lastL1BlockRead))
-}
-
-func (s *InputterTestSuite) TestFindAllInputsByBlockAndTimestampLT() {
-	client, err := ethclient.DialContext(s.ctx, "http://127.0.0.1:8545")
-	s.NoError(err)
-	appAddress := common.HexToAddress(devnet.ApplicationAddress)
-	inputBoxAddress := common.HexToAddress(devnet.InputBoxAddress)
-	inputBox, err := contracts.NewInputBox(inputBoxAddress, client)
-	s.NoError(err)
-	ctx := context.Background()
-	err = devnet.AddInput(ctx, s.rpcUrl, common.Hex2Bytes("deadbeef"))
-	s.NoError(err)
-	l1FinalizedPrevHeight := uint64(1)
-	timestamp := uint64(time.Now().UnixMilli())
-	w := InputterWorker{
+	w := InputReaderWorker{
 		Model:              nil,
 		Provider:           "",
 		InputBoxAddress:    inputBoxAddress,
@@ -115,7 +89,7 @@ func (s *InputterTestSuite) TestFindAllInputsByBlockAndTimestampLT() {
 	s.Equal(1, len(inputs))
 }
 
-func (s *InputterTestSuite) TestZeroResultsFindAllInputsByBlockAndTimestampLT() {
+func (s *InputReaderTestSuite) TestZeroResultsFindAllInputsByBlockAndTimestampLT() {
 	client, err := ethclient.DialContext(s.ctx, "http://127.0.0.1:8545")
 	s.NoError(err)
 	appAddress := common.HexToAddress(devnet.ApplicationAddress)
@@ -127,7 +101,7 @@ func (s *InputterTestSuite) TestZeroResultsFindAllInputsByBlockAndTimestampLT() 
 	s.NoError(err)
 	l1FinalizedPrevHeight := uint64(1)
 	timestamp := uint64(time.Now().UnixMilli())
-	w := InputterWorker{
+	w := InputReaderWorker{
 		Model:              nil,
 		Provider:           "",
 		InputBoxAddress:    inputBoxAddress,
@@ -144,7 +118,7 @@ func (s *InputterTestSuite) TestZeroResultsFindAllInputsByBlockAndTimestampLT() 
 	s.Equal(0, len(inputs))
 }
 
-func (s *InputterTestSuite) TearDownTest() {
+func (s *InputReaderTestSuite) TearDownTest() {
 	s.workerCancel()
 	select {
 	case <-s.ctx.Done():
@@ -157,5 +131,5 @@ func (s *InputterTestSuite) TearDownTest() {
 }
 
 func TestInputterTestSuite(t *testing.T) {
-	suite.Run(t, &InputterTestSuite{})
+	suite.Run(t, &InputReaderTestSuite{})
 }

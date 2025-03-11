@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/calindra/rollups-avail-reader/pkg/contracts"
-	"github.com/calindra/rollups-avail-reader/pkg/inputter"
+	"github.com/calindra/rollups-avail-reader/pkg/inputreader"
 	"github.com/calindra/rollups-avail-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-avail-reader/pkg/supervisor"
 	"github.com/cartesi/rollups-graphql/pkg/commons"
@@ -32,7 +32,7 @@ const (
 type AvailListener struct {
 	PaioDecoder        paiodecoder.DecoderPaio
 	InputRepository    *cRepos.InputRepository
-	InputterWorker     *inputter.InputterWorker
+	InputterWorker     *inputreader.InputReaderWorker
 	FromBlock          uint64
 	AvailFromBlock     uint64
 	L1CurrentBlock     uint64
@@ -45,7 +45,7 @@ type PaioDecoder interface {
 }
 
 func NewAvailListener(availFromBlock uint64, repository *cRepos.InputRepository,
-	w *inputter.InputterWorker, fromBlock uint64, binaryDecoderPathLocation string,
+	w *inputreader.InputReaderWorker, fromBlock uint64, binaryDecoderPathLocation string,
 	applicationAddress string,
 ) supervisor.Worker {
 	var paioDecoder PaioDecoder = paiodecoder.ZzzzHuiDecoder{}

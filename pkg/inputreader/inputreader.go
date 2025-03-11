@@ -1,7 +1,7 @@
 // (c) Cartesi and individual authors (see AUTHORS)
 // SPDX-License-Identifier: Apache-2.0 (see LICENSE)
 
-package inputter
+package inputreader
 
 import (
 	"context"
@@ -33,7 +33,7 @@ type Model interface {
 }
 
 // This worker reads inputs from Ethereum and puts them in the model.
-type InputterWorker struct {
+type InputReaderWorker struct {
 	Model              Model
 	Provider           string
 	InputBoxAddress    common.Address
@@ -43,23 +43,23 @@ type InputterWorker struct {
 	EthClient          *ethclient.Client
 }
 
-func (w InputterWorker) String() string {
-	return "inputter"
+func (w InputReaderWorker) String() string {
+	return "inputreader"
 }
 
-func (w *InputterWorker) GetEthClient() (*ethclient.Client, error) {
+func (w *InputReaderWorker) GetEthClient() (*ethclient.Client, error) {
 	if w.EthClient == nil {
 		ctx := context.Background()
 		client, err := ethclient.DialContext(ctx, w.Provider)
 		if err != nil {
-			return nil, fmt.Errorf("inputter: dial: %w", err)
+			return nil, fmt.Errorf("inputreader: dial: %w", err)
 		}
 		w.EthClient = client
 	}
 	return w.EthClient, nil
 }
 
-func (w *InputterWorker) ChainID() (*big.Int, error) {
+func (w *InputReaderWorker) ChainID() (*big.Int, error) {
 	client, err := w.GetEthClient()
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (w *InputterWorker) ChainID() (*big.Int, error) {
 }
 
 // Read inputs starting from the input box deployment block until the latest block.
-func (w *InputterWorker) ReadPastInputs(
+func (w *InputReaderWorker) ReadPastInputs(
 	ctx context.Context,
 	client *ethclient.Client,
 	inputBox *contracts.InputBox,
@@ -96,7 +96,7 @@ func (w *InputterWorker) ReadPastInputs(
 	filter := []common.Address{w.ApplicationAddress}
 	it, err := inputBox.FilterInputAdded(&opts, filter, nil)
 	if err != nil {
-		return fmt.Errorf("inputter: filter input added: %v", err)
+		return fmt.Errorf("inputreader: filter input added: %v", err)
 	}
 	defer it.Close()
 	for it.Next() {
@@ -109,14 +109,14 @@ func (w *InputterWorker) ReadPastInputs(
 }
 
 // Add the input to the model.
-func (w InputterWorker) addInput(
+func (w InputReaderWorker) addInput(
 	ctx context.Context,
 	client *ethclient.Client,
 	event *contracts.InputBoxInputAdded,
 ) error {
 	header, err := client.HeaderByHash(ctx, event.Raw.BlockHash)
 	if err != nil {
-		return fmt.Errorf("inputter: failed to get tx header: %w", err)
+		return fmt.Errorf("inputreader: failed to get tx header: %w", err)
 	}
 	timestamp := time.Unix(int64(header.Time), 0)
 
@@ -140,7 +140,7 @@ func (w InputterWorker) addInput(
 	payload := common.Bytes2Hex(values[7].([]uint8))
 	inputIndex := int(event.Index.Int64())
 
-	slog.Debug("inputter: read event",
+	slog.Debug("inputreader: read event",
 		"dapp", event.AppContract,
 		"input.index", event.Index,
 		"sender", msgSender,
@@ -180,55 +180,7 @@ func (w InputterWorker) addInput(
 	return nil
 }
 
-func (w InputterWorker) ReadInputsByBlockAndTimestamp(
-	ctx context.Context,
-	client *ethclient.Client,
-	inputBox *contracts.InputBox,
-	startBlockNumber uint64,
-	endTimestamp uint64,
-) (uint64, error) {
-	slog.Debug("ReadInputsByBlockAndTimestamp",
-		"startBlockNumber", startBlockNumber,
-		"dappAddress", w.ApplicationAddress,
-		"endTimestamp", endTimestamp,
-	)
-	lastL1BlockRead := startBlockNumber
-
-	opts := bind.FilterOpts{
-		Context: ctx,
-		Start:   startBlockNumber,
-	}
-	filter := []common.Address{w.ApplicationAddress}
-	it, err := inputBox.FilterInputAdded(&opts, filter, nil)
-
-	if err != nil {
-		return 0, fmt.Errorf("inputter: filter input added: %v", err)
-	}
-	defer it.Close()
-
-	for it.Next() {
-		header, err := client.HeaderByHash(ctx, it.Event.Raw.BlockHash)
-
-		if err != nil {
-			return 0, fmt.Errorf("inputter: failed to get tx header: %w", err)
-		}
-		timestamp := uint64(header.Time)
-
-		if timestamp < endTimestamp {
-			w.InputBoxBlock = it.Event.Raw.BlockNumber - 1
-			if err := w.addInput(ctx, client, it.Event); err != nil {
-				return 0, err
-			}
-			lastL1BlockRead = it.Event.Raw.BlockNumber
-		} else {
-			slog.Debug("InputAdded ignored", "timestamp", timestamp, "endTimestamp", endTimestamp)
-		}
-	}
-
-	return lastL1BlockRead, nil
-}
-
-func (w InputterWorker) FindAllInputsByBlockAndTimestampLT(
+func (w InputReaderWorker) FindAllInputsByBlockAndTimestampLT(
 	ctx context.Context,
 	client *ethclient.Client,
 	inputBox *contracts.InputBox,
@@ -249,7 +201,7 @@ func (w InputterWorker) FindAllInputsByBlockAndTimestampLT(
 	it, err := inputBox.FilterInputAdded(&opts, filter, nil)
 	result := []cModel.AdvanceInput{}
 	if err != nil {
-		return result, fmt.Errorf("inputter: filter input added: %v", err)
+		return result, fmt.Errorf("inputreader: filter input added: %v", err)
 	}
 	defer it.Close()
 
@@ -257,7 +209,7 @@ func (w InputterWorker) FindAllInputsByBlockAndTimestampLT(
 		header, err := client.HeaderByHash(ctx, it.Event.Raw.BlockHash)
 
 		if err != nil {
-			return result, fmt.Errorf("inputter: failed to get tx header: %w", err)
+			return result, fmt.Errorf("inputreader: failed to get tx header: %w", err)
 		}
 		timestamp := uint64(header.Time)
 		unixTimestamp := time.Unix(int64(header.Time), 0)

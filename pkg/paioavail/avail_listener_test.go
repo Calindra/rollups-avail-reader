@@ -12,7 +12,7 @@ import (
 
 	"github.com/calindra/rollups-avail-reader/pkg/contracts"
 	"github.com/calindra/rollups-avail-reader/pkg/devnet"
-	"github.com/calindra/rollups-avail-reader/pkg/inputter"
+	"github.com/calindra/rollups-avail-reader/pkg/inputreader"
 	"github.com/calindra/rollups-avail-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-avail-reader/pkg/supervisor"
 	"github.com/cartesi/rollups-graphql/pkg/commons"
@@ -88,7 +88,7 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
 	block.Block.Extrinsics = append(block.Block.Extrinsics, extrinsicPaioBlock)
 	availListener := AvailListener{
 		PaioDecoder: s.fd,
-		InputterWorker: &inputter.InputterWorker{
+		InputterWorker: &inputreader.InputReaderWorker{
 			Provider: s.rpcUrl,
 		},
 	}
@@ -110,7 +110,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 
 	l1FinalizedPrevHeight := uint64(1)
 	timestamp := uint64(time.Now().UnixMilli())
-	inputterWorker := inputter.InputterWorker{
+	inputterWorker := inputreader.InputReaderWorker{
 		Model:              nil,
 		Provider:           s.rpcUrl,
 		InputBoxAddress:    inputBoxAddress,

@@ -17,8 +17,8 @@ import (
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcutil/hdkeychain"
+	"github.com/calindra/rollups-base-reader/pkg/eip712"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
-	"github.com/cartesi/rollups-graphql/pkg/commons"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/signature"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
 	"github.com/cosmos/go-bip39"
@@ -73,7 +73,7 @@ func (av *AvailClient) Submit712(ctx context.Context, payload string, dappAddres
 	)
 
 	// Hash the message
-	messageHash, err := commons.HashEIP712Message(typedData)
+	messageHash, err := eip712.HashEIP712Message(typedData)
 	if err != nil {
 		log.Fatal("Error hashing message:", err)
 	}
@@ -85,7 +85,7 @@ func (av *AvailClient) Submit712(ctx context.Context, payload string, dappAddres
 	}
 
 	// Sign the message
-	signature, err := commons.SignMessage(messageHash, privateKey)
+	signature, err := eip712.SignMessage(messageHash, privateKey)
 	if err != nil {
 		log.Fatal("Error signing message:", err)
 	}
@@ -113,7 +113,7 @@ func (av *AvailClient) Submit712(ctx context.Context, payload string, dappAddres
 	typedDataBase64 := base64.StdEncoding.EncodeToString(typedDataJSON)
 
 	signature[64] += 27
-	sigAndData := commons.SigAndData{
+	sigAndData := eip712.SigAndData{
 		Signature: "0x" + common.Bytes2Hex(signature),
 		TypedData: typedDataBase64,
 	}

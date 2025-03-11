@@ -28,6 +28,8 @@ github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792/go.mod h1:ghJtE
 github.com/btcsuite/winsvc v1.0.0/go.mod h1:jsenWakMcC0zFBFurPLEAyrnc/teJEM1O46fmI40EZs=
 github.com/calindra/rollups-base-reader v0.0.0-20250311172200-87125ca97274 h1:BXmQnShfAtyJ8sfDXlGjDtnr8JlvkPs5fAvsrtFX9D8=
 github.com/calindra/rollups-base-reader v0.0.0-20250311172200-87125ca97274/go.mod h1:pqAaHyPZJ4Mxqko5ZrChJJTMv/2KJSe+j8dDHhe+iLc=
+github.com/calindra/rollups-base-reader v0.0.0-20250311174618-9bed2f04dd33 h1:kHlYW4wMsg3Ob8pfdeixkhEvBrNRzKVkjB9IzAxEglQ=
+github.com/calindra/rollups-base-reader v0.0.0-20250311174618-9bed2f04dd33/go.mod h1:pqAaHyPZJ4Mxqko5ZrChJJTMv/2KJSe+j8dDHhe+iLc=
 github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85 h1:jXPVMlsaeEsLphI06h7WPCYo2N10uLQJ3bG+dJIO7Ms=
 github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85/go.mod h1:9qwjcErHHnH2CeW9QlRuOXdfj59Nl721VeLFaOyjZ9w=
 github.com/cespare/cp v0.1.0 h1:SE+dxFebS7Iik5LK0tsi1k9ZCxEaFX4AjQmoyA+1dJk=

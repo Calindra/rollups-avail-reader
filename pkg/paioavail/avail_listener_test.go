@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calindra/rollups-base-reader/pkg/commons"
 	"github.com/calindra/rollups-base-reader/pkg/contracts"
 	"github.com/calindra/rollups-base-reader/pkg/devnet"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
-	"github.com/cartesi/rollups-graphql/pkg/commons"
 	"github.com/cartesi/rollups-graphql/pkg/convenience/repository"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
 	"github.com/ethereum/go-ethereum/common"

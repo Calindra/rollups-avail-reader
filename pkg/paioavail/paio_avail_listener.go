@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/calindra/rollups-base-reader/pkg/contracts"
+	"github.com/calindra/rollups-base-reader/pkg/eip712"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
-	"github.com/cartesi/rollups-graphql/pkg/commons"
 	cModel "github.com/cartesi/rollups-graphql/pkg/convenience/model"
 	cRepos "github.com/cartesi/rollups-graphql/pkg/convenience/repository"
 	gsrpc "github.com/centrifuge/go-substrate-rpc-client/v4"
@@ -342,7 +342,7 @@ func ReadInputsFromAvailBlockZzzHui(block *types.SignedBlock) ([]cModel.AdvanceI
 		}
 		args := string(ext.Method.Args)
 
-		msgSender, typedData, signature, err := commons.ExtractSigAndData(args)
+		msgSender, typedData, signature, err := eip712.ExtractSigAndData(args)
 		if err != nil {
 			return inputs, err
 		}

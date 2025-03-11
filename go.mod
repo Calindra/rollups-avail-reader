@@ -7,12 +7,11 @@ toolchain go1.23.7
 require (
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
-	github.com/calindra/rollups-base-reader v0.0.0-20250311172200-87125ca97274
+	github.com/calindra/rollups-base-reader v0.0.0-20250311174618-9bed2f04dd33
 	github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85
 	github.com/centrifuge/go-substrate-rpc-client/v4 v4.2.1
 	github.com/cosmos/go-bip39 v1.0.0
 	github.com/ethereum/go-ethereum v1.15.5
-	github.com/google/go-github v17.0.0+incompatible
 	github.com/ncruces/go-sqlite3 v0.16.0
 	github.com/stretchr/testify v1.10.0
 )
@@ -37,6 +36,7 @@ require (
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
+	github.com/google/go-github v17.0.0+incompatible // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect

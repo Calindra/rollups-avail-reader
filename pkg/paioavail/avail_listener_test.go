@@ -88,7 +88,7 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
 	block.Block.Extrinsics = append(block.Block.Extrinsics, extrinsicPaioBlock)
 	availListener := AvailListener{
 		PaioDecoder: s.fd,
-		InputterWorker: &inputreader.InputReaderWorker{
+		InputReaderWorker: &inputreader.InputReaderWorker{
 			Provider: s.rpcUrl,
 		},
 	}
@@ -141,7 +141,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	fd := FakeDecoder{}
 	availListener := AvailListener{
 		PaioDecoder:        &fd,
-		InputterWorker:     &inputterWorker,
+		InputReaderWorker:  &inputterWorker,
 		InputRepository:    inputRepository,
 		ApplicationAddress: common.HexToAddress(devnet.ApplicationAddress),
 	}

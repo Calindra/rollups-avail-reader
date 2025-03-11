@@ -32,7 +32,7 @@ const (
 type AvailListener struct {
 	PaioDecoder        paiodecoder.DecoderPaio
 	InputRepository    *cRepos.InputRepository
-	InputterWorker     *inputreader.InputReaderWorker
+	InputReaderWorker  *inputreader.InputReaderWorker
 	FromBlock          uint64
 	AvailFromBlock     uint64
 	L1CurrentBlock     uint64
@@ -65,7 +65,7 @@ func NewAvailListener(availFromBlock uint64, repository *cRepos.InputRepository,
 	return AvailListener{
 		AvailFromBlock:     availFromBlock,
 		InputRepository:    repository,
-		InputterWorker:     w,
+		InputReaderWorker:  w,
 		PaioDecoder:        paioDecoder,
 		L1CurrentBlock:     fromBlock,
 		ApplicationAddress: common.HexToAddress(applicationAddress),
@@ -131,13 +131,13 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 	var index uint = 0
 	defer client.Client.Close()
 
-	ethClient, err := a.InputterWorker.GetEthClient()
+	ethClient, err := a.InputReaderWorker.GetEthClient()
 	if err != nil {
-		return fmt.Errorf("avail inputter: dial: %w", err)
+		return fmt.Errorf("avail input reader: dial: %w", err)
 	}
-	inputBox, err := contracts.NewInputBox(a.InputterWorker.InputBoxAddress, ethClient)
+	inputBox, err := contracts.NewInputBox(a.InputReaderWorker.InputBoxAddress, ethClient)
 	if err != nil {
-		return fmt.Errorf("avail inputter: bind input box: %w", err)
+		return fmt.Errorf("avail input reader: bind input box: %w", err)
 	}
 
 	for {
@@ -249,7 +249,7 @@ func (a AvailListener) TableTennis(ctx context.Context,
 	} else {
 		availBlockTimestamp = uint64(availInputs[0].BlockTimestamp.Unix())
 	}
-	inputsL1, err := a.InputterWorker.FindAllInputsByBlockAndTimestampLT(ctx,
+	inputsL1, err := a.InputReaderWorker.FindAllInputsByBlockAndTimestampLT(ctx,
 		ethClient, inputBox, startBlockNumber,
 		(availBlockTimestamp/ONE_SECOND_IN_MS)-uint64(a.L1ReadDelay),
 	)
@@ -299,7 +299,7 @@ func (av *AvailListener) ReadInputsFromPaioBlock(ctx context.Context, block *typ
 	if err != nil {
 		return inputs, err
 	}
-	chainId, err := av.InputterWorker.ChainID()
+	chainId, err := av.InputReaderWorker.ChainID()
 	if err != nil {
 		return inputs, err
 	}

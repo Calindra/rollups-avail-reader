@@ -10,6 +10,7 @@ import (
 
 	"github.com/calindra/rollups-base-reader/pkg/contracts"
 	"github.com/calindra/rollups-base-reader/pkg/eip712"
+	ip "github.com/calindra/rollups-base-reader/pkg/input_repository"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
@@ -31,7 +32,7 @@ const (
 
 type AvailListener struct {
 	PaioDecoder        paiodecoder.DecoderPaio
-	InputRepository    *cRepos.InputRepository
+	InputRepository    *ip.InputRepository
 	InputReaderWorker  *inputreader.InputReaderWorker
 	FromBlock          uint64
 	AvailFromBlock     uint64

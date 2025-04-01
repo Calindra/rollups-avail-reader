@@ -10,12 +10,12 @@ import (
 
 	"github.com/calindra/rollups-base-reader/pkg/contracts"
 	"github.com/calindra/rollups-base-reader/pkg/eip712"
-	ip "github.com/calindra/rollups-base-reader/pkg/input_repository"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
+	"github.com/calindra/rollups-base-reader/pkg/model"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
+	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
 	cModel "github.com/cartesi/rollups-graphql/pkg/convenience/model"
-	cRepos "github.com/cartesi/rollups-graphql/pkg/convenience/repository"
 	gsrpc "github.com/centrifuge/go-substrate-rpc-client/v4"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,7 +32,8 @@ const (
 
 type AvailListener struct {
 	PaioDecoder        paiodecoder.DecoderPaio
-	InputRepository    *ip.InputRepository
+	InputRepository    *repository.InputRepository
+	AppRepository      *repository.AppRepository
 	InputReaderWorker  *inputreader.InputReaderWorker
 	FromBlock          uint64
 	AvailFromBlock     uint64
@@ -45,7 +46,7 @@ type PaioDecoder interface {
 	DecodePaioBatch(ctx context.Context, bytes []byte) (string, error)
 }
 
-func NewAvailListener(availFromBlock uint64, repository *cRepos.InputRepository,
+func NewAvailListener(availFromBlock uint64, repository *repository.InputRepository, appRepository *repository.AppRepository,
 	w *inputreader.InputReaderWorker, fromBlock uint64, binaryDecoderPathLocation string,
 	applicationAddress string,
 ) supervisor.Worker {
@@ -65,6 +66,7 @@ func NewAvailListener(availFromBlock uint64, repository *cRepos.InputRepository,
 	}
 	return AvailListener{
 		AvailFromBlock:     availFromBlock,
+		AppRepository:      appRepository,
 		InputRepository:    repository,
 		InputReaderWorker:  w,
 		PaioDecoder:        paioDecoder,
@@ -235,6 +237,13 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 func (a AvailListener) TableTennis(ctx context.Context,
 	block *types.SignedBlock, ethClient *ethclient.Client,
 	inputBox *contracts.InputBox, startBlockNumber uint64) (*uint64, error) {
+	apps, err := a.AppRepository.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("avail input reader: list applications: %w", err)
+	}
+	if len(apps) == 0 {
+		return nil, fmt.Errorf("avail input reader: no applications found")
+	}
 
 	var currentL1Block uint64
 	availInputs, err := a.ReadInputsFromPaioBlock(ctx, block)
@@ -267,35 +276,31 @@ func (a AvailListener) TableTennis(ctx context.Context,
 			return nil, err
 		}
 		for i := range inputs {
-			inputs[i].Index = i + int(inputCount)
+			inputs[i].Index = uint64(i) + inputCount
 			if inputs[i].AppContract != a.ApplicationAddress {
 				slog.Warn("Skipping input",
-					"appContract", inputs[i].AppContract.Hex(),
+					"appContract", inputs[i].AppContract,
 					"expected", a.ApplicationAddress.Hex(),
-					"msgSender", inputs[i].MsgSender.Hex(),
-					"payload", inputs[i].Payload,
 				)
 				continue
 			}
 			// The chainId information does not come in Paio's batch.
-			_, err = a.InputRepository.Create(ctx, inputs[i])
+			err = a.InputRepository.Create(ctx, inputs[i].Input)
 			if err != nil {
 				return nil, err
 			}
 			slog.Info("Input saved",
-				"ID", inputs[i].ID,
 				"index", inputs[i].Index,
-				"appContract", inputs[i].AppContract.Hex(),
-				"msgSender", inputs[i].MsgSender.Hex(),
-				"payload", inputs[i].Payload,
+				"appID", inputs[i].EpochApplicationID,
+				"payload", inputs[i].RawData,
 			)
 		}
 	}
 	return &currentL1Block, nil
 }
 
-func (av *AvailListener) ReadInputsFromPaioBlock(ctx context.Context, block *types.SignedBlock) ([]cModel.AdvanceInput, error) {
-	inputs := []cModel.AdvanceInput{}
+func (av *AvailListener) ReadInputsFromPaioBlock(ctx context.Context, block *types.SignedBlock) ([]model.InputExtra, error) {
+	inputs := []model.InputExtra{}
 	timestamp, err := ReadTimestampFromBlock(block)
 	if err != nil {
 		return inputs, err

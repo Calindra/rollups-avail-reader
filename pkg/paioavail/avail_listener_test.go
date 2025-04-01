@@ -15,8 +15,9 @@ import (
 	"github.com/calindra/rollups-base-reader/pkg/devnet"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
+	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
-	"github.com/cartesi/rollups-graphql/pkg/convenience/repository"
+
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -133,11 +134,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 
 	s.DbFactory = commons.NewDbFactory()
 	db := s.DbFactory.CreateDb("input.sqlite3")
-	inputRepository := &repository.InputRepository{
-		Db: *db,
-	}
-	err = inputRepository.CreateTables()
-	s.NoError(err)
+	inputRepository := repository.NewInputRepository(db)
 	fd := FakeDecoder{}
 	availListener := AvailListener{
 		PaioDecoder:        &fd,
@@ -166,13 +163,15 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	s.Equal(2, int(savedInputs.Total))
 
 	// check the input from InputBox
-	s.Equal("0", savedInputs.Rows[0].ID)
-	s.Equal("0xdeadbeef11", savedInputs.Rows[0].Payload)
+	s.Equal("0", savedInputs.Rows[0].Index)
+	expectPayload := common.Hex2Bytes("0xdeadbeef11")
+	s.Equal(expectPayload, savedInputs.Rows[0].RawData)
 
-	hexPayloadWithoutPrefix := strings.TrimPrefix(savedInputs.Rows[1].Payload, "0x")
+	payloadStr := common.Bytes2Hex(savedInputs.Rows[1].RawData)
+	hexPayloadWithoutPrefix := strings.TrimPrefix(payloadStr, "0x")
 	// check the input from Avail
 	s.Equal("0x4adf75e71bb8831739bfccd25958f03ca057d5df8b93a50e3fb7dae1e540faa7",
-		savedInputs.Rows[1].ID)
+		savedInputs.Rows[1].Index)
 	s.Equal("Hello, World?", string(common.Hex2Bytes(hexPayloadWithoutPrefix)))
 }
 

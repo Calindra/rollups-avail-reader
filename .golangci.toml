@@ -8,3 +8,10 @@ print-linter-name = true
 print-issued-lines = true
 colors = true
 
+[linters]
+settings.errcheck.exclude-functions = ["(io.Closer).Close"]
+exclusions.rules = [
+    { path = "pkg/paioavail", linters = [
+        "staticcheck",
+    ], text = "QF1008:" },
+]

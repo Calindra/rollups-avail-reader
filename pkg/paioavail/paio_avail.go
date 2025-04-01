@@ -24,6 +24,7 @@ import (
 	"github.com/cosmos/go-bip39"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	_ "github.com/lib/pq"
 )
 
 const (

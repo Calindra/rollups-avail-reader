@@ -1,0 +1,10 @@
+version = "2"
+
+[run]
+timeout = "5m"
+
+[output.formats.text]
+print-linter-name = true
+print-issued-lines = true
+colors = true
+

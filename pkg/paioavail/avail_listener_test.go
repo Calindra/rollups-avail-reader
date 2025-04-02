@@ -3,9 +3,13 @@ package paioavail
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/big"
+	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +21,7 @@ import (
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -25,24 +30,49 @@ import (
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
+
+	_ "github.com/lib/pq"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
 type AvailListenerSuite struct {
 	suite.Suite
-	fd            paiodecoder.DecoderPaio
-	ctx           context.Context
-	workerCtx     context.Context
-	timeoutCancel context.CancelFunc
-	workerCancel  context.CancelFunc
-	workerResult  chan error
-	rpcUrl        string
-	portCounter   int
-	DbFactory     *commons.DbFactory
+	fd              paiodecoder.DecoderPaio
+	ctx             context.Context
+	workerCtx       context.Context
+	timeoutCancel   context.CancelFunc
+	workerCancel    context.CancelFunc
+	workerResult    chan error
+	rpcUrl          string
+	portCounter     int
+	DbFactory       *commons.DbFactory
+	appRepository   *repository.AppRepository
+	epochRepository *repository.EpochRepository
+	inputRepository *repository.InputRepository
+	image           *postgres.PostgresContainer
+	schemaDir       string
 }
 
 func TestAvailListenerSuite(t *testing.T) {
-	commons.ConfigureLog(slog.LevelDebug)
 	suite.Run(t, &AvailListenerSuite{})
+}
+
+func (s *AvailListenerSuite) SetupSuite() {
+	// Fetch schema
+	tmpDir, err := os.MkdirTemp("", "schema")
+	s.NoError(err)
+	s.schemaDir = filepath.Join(tmpDir, "schema.sql")
+	schemaFile, err := os.Create(s.schemaDir)
+	s.NoError(err)
+	defer schemaFile.Close()
+
+	resp, err := http.Get(commons.Schema)
+	s.NoError(err)
+	defer resp.Body.Close()
+
+	_, err = io.Copy(schemaFile, resp.Body)
+	s.NoError(err)
 }
 
 func (s *AvailListenerSuite) TestReadTimestampFromBlockError() {
@@ -99,24 +129,34 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
 }
 
 func (s *AvailListenerSuite) TestTableTennis() {
+	apps, err := s.appRepository.List(s.ctx)
+	s.NoError(err)
+	s.NotNil(apps)
+	s.Len(apps, 1)
+	s.Equal(10, int(apps[0].EpochLength))
+	appAddress := "0x8e3c7bF65833ccb1755dAB530Ef0405644FE6ae3"
+
+	appAddresses := make([]common.Address, len(apps))
+	for i, app := range apps {
+		appAddresses[i] = app.IApplicationAddress
+	}
+
 	ethClient, err := ethclient.DialContext(s.ctx, s.rpcUrl)
 	s.NoError(err)
-	appAddress := common.HexToAddress(devnet.ApplicationAddress)
 	inputBoxAddress := common.HexToAddress(devnet.InputBoxAddress)
 	inputBox, err := contracts.NewInputBox(inputBoxAddress, ethClient)
 	s.NoError(err)
 	ctx := context.Background()
-	err = devnet.AddInput(ctx, s.rpcUrl, common.Hex2Bytes("deadbeef11"))
+	err = devnet.AddInput(ctx, s.rpcUrl, common.Hex2Bytes("deadbeef11"), appAddress)
 	s.NoError(err)
 
 	l1FinalizedPrevHeight := uint64(1)
 	timestamp := uint64(time.Now().UnixMilli())
 	inputterWorker := inputreader.InputReaderWorker{
-		Model:              nil,
-		Provider:           s.rpcUrl,
-		InputBoxAddress:    inputBoxAddress,
-		InputBoxBlock:      1,
-		ApplicationAddress: appAddress,
+		Model:           nil,
+		Provider:        s.rpcUrl,
+		InputBoxAddress: inputBoxAddress,
+		InputBoxBlock:   1,
 	}
 	// Avail's block
 	block := types.SignedBlock{}
@@ -127,45 +167,47 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	block.Block.Extrinsics = append([]types.Extrinsic{}, timestampExtrinsic)
 	// nolint
 	fromPaio := "0x1463f9725f107358c9115bc9d86c72dd5823e9b1e60114"
-	fromPaio = fromPaio + strings.ToLower(devnet.ApplicationAddress)
+	fromPaio = fromPaio + strings.ToLower(appAddress)
 	fromPaio = fromPaio + "000a0d48656c6c6f2c20576f726c643f2076a270f52ade97cd95ef7be45e08ea956bfdaf14b7fc4f8816207fa9eb3a5c17207ccdd94ac1bd86a749b66526fff6579e2b6bf1698e831955332ad9d5ed44da7208000000000000001c"
 	extrinsicPaioBlock := CreatePaioExtrinsic(common.Hex2Bytes(fromPaio))
 	block.Block.Extrinsics = append(block.Block.Extrinsics, extrinsicPaioBlock)
 
-	s.DbFactory = commons.NewDbFactory()
-	db := s.DbFactory.CreateDb("input.sqlite3")
-	inputRepository := repository.NewInputRepository(db)
 	fd := FakeDecoder{}
 	availListener := AvailListener{
-		PaioDecoder:        &fd,
-		InputReaderWorker:  &inputterWorker,
-		InputRepository:    inputRepository,
-		ApplicationAddress: common.HexToAddress(devnet.ApplicationAddress),
+		PaioDecoder:       &fd,
+		InputReaderWorker: &inputterWorker,
+		InputRepository:   s.inputRepository,
+		AppRepository:     s.appRepository,
+		EpochRepository:   s.epochRepository,
 	}
 	inputs, err := availListener.ReadInputsFromPaioBlock(ctx, &block)
 	s.NoError(err)
 	s.Equal(1, len(inputs))
 	s.Equal(int64(timestamp)+int64(delta), inputs[0].BlockTimestamp.Unix())
 	availBlockTimestamp := uint64(inputs[0].BlockTimestamp.Unix())
-	inputs, err = inputterWorker.FindAllInputsByBlockAndTimestampLT(ctx, ethClient, inputBox, l1FinalizedPrevHeight, (availBlockTimestamp/1000)-300)
+	inputs, err = inputterWorker.FindAllInputsByBlockAndTimestampLT(ctx, ethClient, inputBox, l1FinalizedPrevHeight, (availBlockTimestamp/1000)-300, appAddresses)
 	s.NoError(err)
 	s.NotNil(inputs)
 	s.Equal(1, len(inputs))
 
+	savedInputsBeforeTableTennis, err := s.inputRepository.FindAll(ctx, nil, nil, nil, nil, nil)
+	s.NoError(err)
+	s.Equal(101, int(savedInputsBeforeTableTennis.Total))
+
 	startBlock := 0
 	currentL1Block, err := availListener.TableTennis(s.ctx, &block, ethClient, inputBox, uint64(startBlock))
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.NotNil(currentL1Block)
 
 	// check if TableTennis has saved the data.
-	savedInputs, err := inputRepository.FindAll(ctx, nil, nil, nil, nil, nil)
+	savedInputs, err := s.inputRepository.FindAll(ctx, nil, nil, nil, nil, nil)
 	s.NoError(err)
-	s.Equal(2, int(savedInputs.Total))
+	s.Equal(103, int(savedInputs.Total))
 
 	// check the input from InputBox
-	s.Equal("0", savedInputs.Rows[0].Index)
-	expectPayload := common.Hex2Bytes("0xdeadbeef11")
-	s.Equal(expectPayload, savedInputs.Rows[0].RawData)
+	s.Equal(0, savedInputs.Rows[0].Index)
+	expectPayload := "0xdeadbeef11"
+	s.Equal(expectPayload, common.Bytes2Hex(savedInputs.Rows[0].RawData))
 
 	payloadStr := common.Bytes2Hex(savedInputs.Rows[1].RawData)
 	hexPayloadWithoutPrefix := strings.TrimPrefix(payloadStr, "0x")
@@ -227,6 +269,31 @@ func (s *AvailListenerSuite) SetupTest() {
 		Verbose:  true,
 		AnvilCmd: "anvil",
 	})
+
+	// Database
+	container, err := postgres.Run(s.ctx, commons.DbImage,
+		postgres.BasicWaitStrategies(),
+		postgres.WithInitScripts(s.schemaDir),
+		postgres.WithDatabase(commons.DbName),
+		postgres.WithUsername(commons.DbUser),
+		postgres.WithPassword(commons.DbPassword),
+		testcontainers.WithLogConsumers(&commons.StdoutLogConsumer{}),
+	)
+	s.NoError(err)
+	extraArg := "sslmode=disable"
+	connectionStr, err := container.ConnectionString(s.ctx, extraArg)
+	s.NoError(err)
+	s.image = container
+	err = container.Start(s.ctx)
+	s.NoError(err)
+
+	db, err := sqlx.ConnectContext(s.ctx, "postgres", connectionStr)
+	s.NoError(err)
+
+	s.appRepository = repository.NewAppRepository(db)
+	s.inputRepository = repository.NewInputRepository(db)
+	s.epochRepository = repository.NewEpochRepository(db)
+
 	s.rpcUrl = fmt.Sprintf("ws://%s:%v", devnet.AnvilDefaultAddress, devnet.AnvilDefaultPort+s.portCounter)
 	ready := make(chan struct{})
 	go func() {

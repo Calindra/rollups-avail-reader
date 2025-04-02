@@ -31,22 +31,22 @@ const (
 )
 
 type AvailListener struct {
-	PaioDecoder        paiodecoder.DecoderPaio
-	InputRepository    *repository.InputRepository
-	AppRepository      *repository.AppRepository
-	InputReaderWorker  *inputreader.InputReaderWorker
-	FromBlock          uint64
-	AvailFromBlock     uint64
-	L1CurrentBlock     uint64
-	ApplicationAddress common.Address
-	L1ReadDelay        int
+	PaioDecoder       paiodecoder.DecoderPaio
+	AppRepository     *repository.AppRepository
+	EpochRepository   *repository.EpochRepository
+	InputRepository   *repository.InputRepository
+	InputReaderWorker *inputreader.InputReaderWorker
+	FromBlock         uint64
+	AvailFromBlock    uint64
+	L1CurrentBlock    uint64
+	L1ReadDelay       int
 }
 
 type PaioDecoder interface {
 	DecodePaioBatch(ctx context.Context, bytes []byte) (string, error)
 }
 
-func NewAvailListener(availFromBlock uint64, repository *repository.InputRepository, appRepository *repository.AppRepository,
+func NewAvailListener(availFromBlock uint64, inputRepository *repository.InputRepository, epochRepository *repository.EpochRepository, appRepository *repository.AppRepository,
 	w *inputreader.InputReaderWorker, fromBlock uint64, binaryDecoderPathLocation string,
 	applicationAddress string,
 ) supervisor.Worker {
@@ -65,14 +65,14 @@ func NewAvailListener(availFromBlock uint64, repository *repository.InputReposit
 		l1ReadDelay = aux
 	}
 	return AvailListener{
-		AvailFromBlock:     availFromBlock,
-		AppRepository:      appRepository,
-		InputRepository:    repository,
-		InputReaderWorker:  w,
-		PaioDecoder:        paioDecoder,
-		L1CurrentBlock:     fromBlock,
-		ApplicationAddress: common.HexToAddress(applicationAddress),
-		L1ReadDelay:        l1ReadDelay,
+		AvailFromBlock:    availFromBlock,
+		AppRepository:     appRepository,
+		EpochRepository:   epochRepository,
+		InputRepository:   inputRepository,
+		InputReaderWorker: w,
+		L1CurrentBlock:    fromBlock,
+		L1ReadDelay:       l1ReadDelay,
+		PaioDecoder:       paioDecoder,
 	}
 }
 
@@ -245,6 +245,11 @@ func (a AvailListener) TableTennis(ctx context.Context,
 		return nil, fmt.Errorf("avail input reader: no applications found")
 	}
 
+	appAddresses := make([]common.Address, len(apps))
+	for i, app := range apps {
+		appAddresses[i] = app.IApplicationAddress
+	}
+
 	var currentL1Block uint64
 	availInputs, err := a.ReadInputsFromPaioBlock(ctx, block)
 	if err != nil {
@@ -262,6 +267,7 @@ func (a AvailListener) TableTennis(ctx context.Context,
 	inputsL1, err := a.InputReaderWorker.FindAllInputsByBlockAndTimestampLT(ctx,
 		ethClient, inputBox, startBlockNumber,
 		(availBlockTimestamp/ONE_SECOND_IN_MS)-uint64(a.L1ReadDelay),
+		appAddresses,
 	)
 	if err != nil {
 		return nil, err
@@ -277,15 +283,31 @@ func (a AvailListener) TableTennis(ctx context.Context,
 		}
 		for i := range inputs {
 			inputs[i].Index = uint64(i) + inputCount
-			if inputs[i].AppContract != a.ApplicationAddress {
+			var app *model.Application = nil
+			for _, appr := range apps {
+				if inputs[i].AppContract.Hex() == appr.IApplicationAddress.Hex() {
+					app = &appr
+					break
+				}
+			}
+			if app == nil {
 				slog.Warn("Skipping input",
 					"appContract", inputs[i].AppContract,
-					"expected", a.ApplicationAddress.Hex(),
+					"expected", apps,
 				)
 				continue
 			}
 			// The chainId information does not come in Paio's batch.
-			err = a.InputRepository.Create(ctx, inputs[i].Input)
+			input := inputs[i].Input
+			input.EpochApplicationID = app.ID
+
+			epoch, err := a.EpochRepository.GetLatestOpenEpoch(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("avail input reader: get latest open epoch: %w", err)
+			}
+			input.EpochIndex = epoch.Index
+			// input.EpochIndex = input.BlockNumber / app.EpochLength
+			err = a.InputRepository.Create(ctx, input)
 			if err != nil {
 				return nil, err
 			}

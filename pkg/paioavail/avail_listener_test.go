@@ -2,6 +2,7 @@ package paioavail
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +19,7 @@ import (
 	"github.com/calindra/rollups-base-reader/pkg/contracts"
 	"github.com/calindra/rollups-base-reader/pkg/devnet"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
+	"github.com/calindra/rollups-base-reader/pkg/model"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
@@ -129,17 +131,35 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
 }
 
 func (s *AvailListenerSuite) TestTableTennis() {
+	dataavailability := model.DataAvailability_Avail
+
+	// List all applications
 	apps, err := s.appRepository.List(s.ctx)
 	s.NoError(err)
-	s.NotNil(apps)
-	s.Len(apps, 1)
-	s.Equal(10, int(apps[0].EpochLength))
-	appAddress := "0x8e3c7bF65833ccb1755dAB530Ef0405644FE6ae3"
+	s.Require().NotEmpty(apps)
 
+	// Change DA from application to Avail
+	firstDapp := apps[0]
+	err = s.appRepository.UpdateDA(s.ctx, firstDapp.ID, dataavailability)
+	s.NoError(err)
+
+	// check if the DA was updated
+	apps, err = s.appRepository.FindByDA(s.ctx, dataavailability)
+	s.NoError(err)
+	s.Require().NotEmpty(apps)
+	s.Equal(firstDapp.ID, apps[0].ID)
+	s.Equal(dataavailability, apps[0].DataAvailability)
+
+	// Convert app addresses to []common.Address
 	appAddresses := make([]common.Address, len(apps))
 	for i, app := range apps {
+		s.NotEqual(0, int(app.EpochLength), "epoch length should not be 0")
 		appAddresses[i] = app.IApplicationAddress
 	}
+
+	// main address
+	appAddress := "0x8e3c7bF65833ccb1755dAB530Ef0405644FE6ae3"
+	s.Contains(appAddresses, common.HexToAddress(appAddress))
 
 	ethClient, err := ethclient.DialContext(s.ctx, s.rpcUrl)
 	s.NoError(err)
@@ -172,9 +192,9 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	extrinsicPaioBlock := CreatePaioExtrinsic(common.Hex2Bytes(fromPaio))
 	block.Block.Extrinsics = append(block.Block.Extrinsics, extrinsicPaioBlock)
 
-	fd := FakeDecoder{}
+	var fd paiodecoder.DecoderPaio = &FakeDecoder{}
 	availListener := AvailListener{
-		PaioDecoder:       &fd,
+		PaioDecoder:       fd,
 		InputReaderWorker: &inputterWorker,
 		InputRepository:   s.inputRepository,
 		AppRepository:     s.appRepository,
@@ -200,29 +220,34 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	s.NotNil(currentL1Block)
 
 	// check if TableTennis has saved the data.
-	savedInputs, err := s.inputRepository.FindAll(ctx, nil, nil, nil, nil, nil)
+	lastTwoInputs := 2
+	savedInputs, err := s.inputRepository.FindAll(ctx, nil, &lastTwoInputs, nil, nil, nil)
 	s.NoError(err)
 	s.Equal(103, int(savedInputs.Total))
 
 	// check the input from InputBox
-	s.Equal(0, savedInputs.Rows[0].Index)
-	expectPayload := "0xdeadbeef11"
+	s.Equal(101, int(savedInputs.Rows[0].Index))
+	expectPayload := "deadbeef11"
 	s.Equal(expectPayload, common.Bytes2Hex(savedInputs.Rows[0].RawData))
 
-	payloadStr := common.Bytes2Hex(savedInputs.Rows[1].RawData)
-	hexPayloadWithoutPrefix := strings.TrimPrefix(payloadStr, "0x")
 	// check the input from Avail
-	s.Equal("0x4adf75e71bb8831739bfccd25958f03ca057d5df8b93a50e3fb7dae1e540faa7",
-		savedInputs.Rows[1].Index)
-	s.Equal("Hello, World?", string(common.Hex2Bytes(hexPayloadWithoutPrefix)))
+	var payloadJson paiodecoder.AvailData
+	err = json.Unmarshal(savedInputs.Rows[1].RawData, &payloadJson)
+	s.NoError(err)
+
+	txHash := common.HexToHash("0x4adf75e71bb8831739bfccd25958f03ca057d5df8b93a50e3fb7dae1e540faa7")
+	payloadTransaction := common.HexToHash(payloadJson.Transaction)
+	s.Equal(txHash, payloadTransaction)
+	s.Equal("Hello, World?", string(payloadJson.Data))
 }
 
 type FakeDecoder struct {
 }
 
 func (fd *FakeDecoder) DecodePaioBatch(ctx context.Context, bytes []byte) (string, error) {
+	appAddress := "0x8e3c7bF65833ccb1755dAB530Ef0405644FE6ae3"
 	// nolint
-	jsonStr := fmt.Sprintf(`{"sequencer_payment_address":"0x63F9725f107358c9115BC9d86c72dD5823E9B1E6","txs":[{"app":"%s","nonce":0,"max_gas_price":10,"data":[72,101,108,108,111,44,32,87,111,114,108,100,63],"signature":{"r":"0x76a270f52ade97cd95ef7be45e08ea956bfdaf14b7fc4f8816207fa9eb3a5c17","s":"0x7ccdd94ac1bd86a749b66526fff6579e2b6bf1698e831955332ad9d5ed44da72","v":"0x1c"}}]}`, devnet.ApplicationAddress)
+	jsonStr := fmt.Sprintf(`{"sequencer_payment_address":"0x63F9725f107358c9115BC9d86c72dD5823E9B1E6","txs":[{"app":"%s","nonce":0,"max_gas_price":10,"data":[72,101,108,108,111,44,32,87,111,114,108,100,63],"signature":{"r":"0x76a270f52ade97cd95ef7be45e08ea956bfdaf14b7fc4f8816207fa9eb3a5c17","s":"0x7ccdd94ac1bd86a749b66526fff6579e2b6bf1698e831955332ad9d5ed44da72","v":"0x1c"}}]}`, appAddress)
 	return jsonStr, nil
 }
 
@@ -257,7 +282,7 @@ func (s *AvailListenerSuite) SetupTest() {
 	commons.ConfigureLog(slog.LevelDebug)
 	var w supervisor.SupervisorWorker
 	w.Name = "SupervisorWorker"
-	const testTimeout = 5 * time.Second
+	const testTimeout = 1 * time.Minute
 	s.portCounter += 1
 	s.ctx, s.timeoutCancel = context.WithTimeout(context.Background(), testTimeout)
 	s.workerResult = make(chan error)

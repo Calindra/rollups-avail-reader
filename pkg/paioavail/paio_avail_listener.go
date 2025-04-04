@@ -237,14 +237,10 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 func (a AvailListener) TableTennis(ctx context.Context,
 	block *types.SignedBlock, ethClient *ethclient.Client,
 	inputBox *contracts.InputBox, startBlockNumber uint64) (*uint64, error) {
-	apps, err := a.AppRepository.List(ctx)
+	apps, err := a.AppRepository.FindByDA(ctx, model.DataAvailability_Avail)
 	if err != nil {
 		return nil, fmt.Errorf("avail input reader: list applications: %w", err)
 	}
-	if len(apps) == 0 {
-		return nil, fmt.Errorf("avail input reader: no applications found")
-	}
-
 	appAddresses := make([]common.Address, len(apps))
 	for i, app := range apps {
 		appAddresses[i] = app.IApplicationAddress
@@ -282,23 +278,24 @@ func (a AvailListener) TableTennis(ctx context.Context,
 			return nil, err
 		}
 		for i := range inputs {
-			inputs[i].Index = uint64(i) + inputCount
+			inputExtra := inputs[i]
+			inputExtra.Input.Index = uint64(i) + inputCount
 			var app *model.Application = nil
 			for _, appr := range apps {
-				if inputs[i].AppContract.Hex() == appr.IApplicationAddress.Hex() {
+				if inputExtra.AppContract.Hex() == appr.IApplicationAddress.Hex() {
 					app = &appr
 					break
 				}
 			}
 			if app == nil {
 				slog.Warn("Skipping input",
-					"appContract", inputs[i].AppContract,
+					"appContract", inputExtra.AppContract.Hex(),
 					"expected", apps,
 				)
 				continue
 			}
 			// The chainId information does not come in Paio's batch.
-			input := inputs[i].Input
+			input := inputExtra.Input
 			input.EpochApplicationID = app.ID
 
 			epoch, err := a.EpochRepository.GetLatestOpenEpoch(ctx)
@@ -312,9 +309,9 @@ func (a AvailListener) TableTennis(ctx context.Context,
 				return nil, err
 			}
 			slog.Info("Input saved",
-				"index", inputs[i].Index,
-				"appID", inputs[i].EpochApplicationID,
-				"payload", inputs[i].RawData,
+				"index", input.Index,
+				"appID", input.EpochApplicationID,
+				"payload", input.RawData,
 			)
 		}
 	}

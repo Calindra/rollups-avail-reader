@@ -53,7 +53,7 @@ type AvailListenerSuite struct {
 	epochRepository *repository.EpochRepository
 	inputRepository *repository.InputRepository
 	image           *postgres.PostgresContainer
-	schemaDir       string
+	schemaPath       string
 }
 
 func TestAvailListenerSuite(t *testing.T) {
@@ -64,8 +64,8 @@ func (s *AvailListenerSuite) SetupSuite() {
 	// Fetch schema
 	tmpDir, err := os.MkdirTemp("", "schema")
 	s.NoError(err)
-	s.schemaDir = filepath.Join(tmpDir, "schema.sql")
-	schemaFile, err := os.Create(s.schemaDir)
+	s.schemaPath = filepath.Join(tmpDir, "schema.sql")
+	schemaFile, err := os.Create(s.schemaPath)
 	s.NoError(err)
 	defer schemaFile.Close()
 
@@ -298,7 +298,7 @@ func (s *AvailListenerSuite) SetupTest() {
 	// Database
 	container, err := postgres.Run(s.ctx, commons.DbImage,
 		postgres.BasicWaitStrategies(),
-		postgres.WithInitScripts(s.schemaDir),
+		postgres.WithInitScripts(s.schemaPath),
 		postgres.WithDatabase(commons.DbName),
 		postgres.WithUsername(commons.DbUser),
 		postgres.WithPassword(commons.DbPassword),
@@ -348,7 +348,6 @@ func (s *AvailListenerSuite) TearDownTest() {
 		s.NoError(err)
 	}
 	s.timeoutCancel()
-	s.T().Log("teardown ok.")
 }
 
 // nolint

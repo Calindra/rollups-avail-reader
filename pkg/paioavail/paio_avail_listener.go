@@ -296,8 +296,7 @@ func (a AvailListener) TableTennis(ctx context.Context,
 			// The chainId information does not come in Paio's batch.
 			input := inputExtra.Input
 			input.EpochApplicationID = app.ID
-
-			err = a.InputService.CreateInputID(ctx, app.ID, input)
+			err = a.InputService.CreateInput(ctx,  input)
 			if err != nil {
 				return nil, fmt.Errorf("avail input reader: create input: %w", err)
 			}

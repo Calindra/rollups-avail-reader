@@ -34,8 +34,8 @@ github.com/btcsuite/goleveldb v0.0.0-20160330041536-7834afc9e8cd/go.mod h1:F+uVa
 github.com/btcsuite/snappy-go v0.0.0-20151229074030-0bdef8d06723/go.mod h1:8woku9dyThutzjeg+3xrA5iCpBRH8XEEg3lh6TiUghc=
 github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792/go.mod h1:ghJtEyQwv5/p4Mg4C0fgbePVuGr935/5ddU9Z3TmDRY=
 github.com/btcsuite/winsvc v1.0.0/go.mod h1:jsenWakMcC0zFBFurPLEAyrnc/teJEM1O46fmI40EZs=
-github.com/calindra/rollups-base-reader v0.0.0-20250404035155-73d1262bb8dc h1:ws/hwjZ8fIu0y1cf4pGAOKH7ShLxolrNEPu6tnNeWRc=
-github.com/calindra/rollups-base-reader v0.0.0-20250404035155-73d1262bb8dc/go.mod h1:ucoXiAIMSqTiPVl1Qj29aZ90Wv//aITS7tGacywLt5g=
+github.com/calindra/rollups-base-reader v0.0.0-20250408032735-e26b8fa3b00b h1:iiCdv0ai9F1O03cb7AsDpsyhTxYhgahWcT8c/mDsjsk=
+github.com/calindra/rollups-base-reader v0.0.0-20250408032735-e26b8fa3b00b/go.mod h1:Z2A0nZVaABVDXDDrXvF8ujv9o3NEqLhzcLiKL2Ao5kc=
 github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85 h1:jXPVMlsaeEsLphI06h7WPCYo2N10uLQJ3bG+dJIO7Ms=
 github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85/go.mod h1:9qwjcErHHnH2CeW9QlRuOXdfj59Nl721VeLFaOyjZ9w=
 github.com/cenkalti/backoff/v4 v4.2.1 h1:y4OZtCnogmCPw98Zjyt5a6+QwPLGkiQsYW5oUqylYbM=

@@ -13,7 +13,7 @@ import (
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
 	"github.com/calindra/rollups-base-reader/pkg/model"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
-	"github.com/calindra/rollups-base-reader/pkg/repository"
+	"github.com/calindra/rollups-base-reader/pkg/services"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
 	cModel "github.com/cartesi/rollups-graphql/pkg/convenience/model"
 	gsrpc "github.com/centrifuge/go-substrate-rpc-client/v4"
@@ -32,9 +32,7 @@ const (
 
 type AvailListener struct {
 	PaioDecoder       paiodecoder.DecoderPaio
-	AppRepository     *repository.AppRepository
-	EpochRepository   *repository.EpochRepository
-	InputRepository   *repository.InputRepository
+	InputService      *services.InputService
 	InputReaderWorker *inputreader.InputReaderWorker
 	FromBlock         uint64
 	AvailFromBlock    uint64
@@ -46,7 +44,7 @@ type PaioDecoder interface {
 	DecodePaioBatch(ctx context.Context, bytes []byte) (string, error)
 }
 
-func NewAvailListener(availFromBlock uint64, inputRepository *repository.InputRepository, epochRepository *repository.EpochRepository, appRepository *repository.AppRepository,
+func NewAvailListener(availFromBlock uint64, inputService *services.InputService,
 	w *inputreader.InputReaderWorker, fromBlock uint64, binaryDecoderPathLocation string,
 	applicationAddress string,
 ) supervisor.Worker {
@@ -66,9 +64,7 @@ func NewAvailListener(availFromBlock uint64, inputRepository *repository.InputRe
 	}
 	return AvailListener{
 		AvailFromBlock:    availFromBlock,
-		AppRepository:     appRepository,
-		EpochRepository:   epochRepository,
-		InputRepository:   inputRepository,
+		InputService:      inputService,
 		InputReaderWorker: w,
 		L1CurrentBlock:    fromBlock,
 		L1ReadDelay:       l1ReadDelay,
@@ -237,9 +233,12 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 func (a AvailListener) TableTennis(ctx context.Context,
 	block *types.SignedBlock, ethClient *ethclient.Client,
 	inputBox *contracts.InputBox, startBlockNumber uint64) (*uint64, error) {
-	apps, err := a.AppRepository.FindByDA(ctx, model.DataAvailability_Avail)
+	apps, err := a.InputService.AppRepository.FindAllByDA(ctx, model.DataAvailability_Avail)
 	if err != nil {
-		return nil, fmt.Errorf("avail input reader: list applications: %w", err)
+		return nil, fmt.Errorf("failed to retrieve applications by avail data availability: %w", err)
+	}
+	if len(apps) == 0 {
+		slog.Debug("No applications found for the specified data availability")
 	}
 	appAddresses := make([]common.Address, len(apps))
 	for i, app := range apps {
@@ -273,7 +272,7 @@ func (a AvailListener) TableTennis(ctx context.Context,
 	}
 	inputs := append(inputsL1, availInputs...)
 	if len(inputs) > 0 {
-		inputCount, err := a.InputRepository.Count(ctx, nil)
+		inputCount, err := a.InputService.InputRepository.Count(ctx, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -298,15 +297,9 @@ func (a AvailListener) TableTennis(ctx context.Context,
 			input := inputExtra.Input
 			input.EpochApplicationID = app.ID
 
-			epoch, err := a.EpochRepository.GetLatestOpenEpoch(ctx)
+			err = a.InputService.CreateInputID(ctx, app.ID, input)
 			if err != nil {
-				return nil, fmt.Errorf("avail input reader: get latest open epoch: %w", err)
-			}
-			input.EpochIndex = epoch.Index
-			// input.EpochIndex = input.BlockNumber / app.EpochLength
-			err = a.InputRepository.Create(ctx, input)
-			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("avail input reader: create input: %w", err)
 			}
 			slog.Info("Input saved",
 				"index", input.Index,

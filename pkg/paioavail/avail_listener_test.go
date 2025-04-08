@@ -22,6 +22,7 @@ import (
 	"github.com/calindra/rollups-base-reader/pkg/model"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-base-reader/pkg/repository"
+	"github.com/calindra/rollups-base-reader/pkg/services"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
 	"github.com/jmoiron/sqlx"
 
@@ -53,7 +54,7 @@ type AvailListenerSuite struct {
 	epochRepository *repository.EpochRepository
 	inputRepository *repository.InputRepository
 	image           *postgres.PostgresContainer
-	schemaPath       string
+	schemaPath      string
 }
 
 func TestAvailListenerSuite(t *testing.T) {
@@ -144,7 +145,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	s.NoError(err)
 
 	// check if the DA was updated
-	apps, err = s.appRepository.FindByDA(s.ctx, dataavailability)
+	apps, err = s.appRepository.FindAllByDA(s.ctx, dataavailability)
 	s.NoError(err)
 	s.Require().NotEmpty(apps)
 	s.Equal(firstDapp.ID, apps[0].ID)
@@ -193,12 +194,12 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	block.Block.Extrinsics = append(block.Block.Extrinsics, extrinsicPaioBlock)
 
 	var fd paiodecoder.DecoderPaio = &FakeDecoder{}
+	inputService := services.NewInputService(s.inputRepository, s.epochRepository, s.appRepository)
+
 	availListener := AvailListener{
 		PaioDecoder:       fd,
 		InputReaderWorker: &inputterWorker,
-		InputRepository:   s.inputRepository,
-		AppRepository:     s.appRepository,
-		EpochRepository:   s.epochRepository,
+		InputService:      inputService,
 	}
 	inputs, err := availListener.ReadInputsFromPaioBlock(ctx, &block)
 	s.NoError(err)

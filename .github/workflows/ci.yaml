@@ -29,9 +29,8 @@ jobs:
           version: ${{ env.ANVIL_TAG }}
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          args: --timeout=5m --out-format=colored-line-number
           version: latest
 
       - name: Check generate
@@ -46,4 +45,3 @@ jobs:
       - name: Test
         run: make test
 
-  

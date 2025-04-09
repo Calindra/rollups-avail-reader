@@ -7,7 +7,7 @@ toolchain go1.23.7
 require (
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
-	github.com/calindra/rollups-base-reader v0.0.0-20250409155224-30a92cd493a9
+	github.com/calindra/rollups-base-reader v0.0.0-20250409160130-6be2d9b317f4
 	github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85
 	github.com/centrifuge/go-substrate-rpc-client/v4 v4.2.1
 	github.com/cosmos/go-bip39 v1.0.0

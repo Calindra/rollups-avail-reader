@@ -1,13 +1,11 @@
 module github.com/calindra/rollups-avail-reader
 
-go 1.23.0
-
-toolchain go1.23.7
+go 1.24.2
 
 require (
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
-	github.com/calindra/rollups-base-reader v0.0.0-20250409160130-6be2d9b317f4
+	github.com/calindra/rollups-base-reader v0.0.0-20250409204942-8b597ba5e02e
 	github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85
 	github.com/centrifuge/go-substrate-rpc-client/v4 v4.2.1
 	github.com/cosmos/go-bip39 v1.0.0
@@ -15,6 +13,8 @@ require (
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/lib/pq v1.10.9
+	github.com/lmittmann/tint v1.0.3
+	github.com/mattn/go-isatty v0.0.20
 	github.com/ncruces/go-sqlite3 v0.16.0
 	github.com/spf13/cast v1.7.0
 	github.com/stretchr/testify v1.10.0
@@ -67,11 +67,9 @@ require (
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
-	github.com/lmittmann/tint v1.0.3 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/mimoo/StrobeGo v0.0.0-20220103164710-9a04d6ca976b // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect

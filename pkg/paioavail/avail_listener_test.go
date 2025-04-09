@@ -2,7 +2,6 @@ package paioavail
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -232,14 +231,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	s.Equal(expectPayload, common.Bytes2Hex(savedInputs.Rows[0].RawData))
 
 	// check the input from Avail
-	var payloadJson paiodecoder.AvailData
-	err = json.Unmarshal(savedInputs.Rows[1].RawData, &payloadJson)
-	s.NoError(err)
-
-	txHash := common.HexToHash("0x4adf75e71bb8831739bfccd25958f03ca057d5df8b93a50e3fb7dae1e540faa7")
-	payloadTransaction := common.HexToHash(payloadJson.Transaction)
-	s.Equal(txHash, payloadTransaction)
-	s.Equal("Hello, World?", string(payloadJson.Data))
+	s.Equal("Hello, World?", string(savedInputs.Rows[1].RawData))
 }
 
 type FakeDecoder struct {

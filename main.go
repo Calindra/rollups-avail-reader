@@ -2,20 +2,23 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/calindra/rollups-avail-reader/pkg/paioavail"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
 	"github.com/calindra/rollups-base-reader/pkg/model"
+	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/services"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
 	"github.com/calindra/rollups-base-reader/pkg/transaction"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -78,20 +81,58 @@ func main() {
 	appRepository := repository.NewAppRepository(db)
 	inputService := services.NewInputService(inputRepository, epochRepository, appRepository)
 
-	paioPath := filepath.Join("./paio-bin", "decode-batch")
+	paioPath, err := paiodecoder.DownloadPaioDecoderExecutableAsNeeded()
+
+	if err != nil {
+		log.Fatal("Failed to download paio decoder executable:", err)
+	}
 
 	inputReaderWorker := &inputreader.InputReaderWorker{
 		Provider: rpcURL,
 	}
 
 	// only for testing purpose
-	appID := int64(1)
+	{
+		var dapp *model.Application
 
-	if err := appRepository.UpdateDA(ctx, appID, model.DataAvailability_Avail); err != nil {
-		log.Fatal("Failed to update data availability:", err)
+		// add application to DataAvailability_Avail
+		addressAvail := common.HexToAddress("0x2291ba684ea6bCA81caCE56fcc1194A84086C912")
+
+		dapp, err = appRepository.FindOneByContract(ctx, addressAvail)
+
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			log.Fatal("Failed to find application:", err)
+		}
+
+		if dapp == nil {
+			daHex := common.Bytes2Hex(model.DataAvailability_Avail[:])
+			slog.Debug("Update application", "daHex", daHex)
+			query := `UPDATE
+			application SET
+				iapplication_address = decode($1, 'hex'),
+				data_availability = decode($2, 'hex')`
+			args := []any{addressAvail.Hex()[2:], daHex}
+
+			tx, err := db.BeginTxx(ctx, nil)
+			if err != nil {
+				log.Fatal("Failed to begin transaction:", err)
+			}
+			defer func() { _ = tx.Rollback() }()
+
+			_, err = tx.ExecContext(ctx, query, args...)
+			if err != nil {
+				log.Fatal("Failed to update application:", err)
+			}
+			if err := tx.Commit(); err != nil {
+				log.Fatal("Failed to commit transaction:", err)
+			}
+		}
+
 	}
 
-	listener := paioavail.NewAvailListener(0, inputService, inputReaderWorker, 0, paioPath)
+	availFromBlock := uint64(1005768)
+
+	listener := paioavail.NewAvailListener(availFromBlock, inputService, inputReaderWorker, 0, paioPath)
 
 	w.Workers = append(w.Workers, listener)
 

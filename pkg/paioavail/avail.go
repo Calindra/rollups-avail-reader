@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/calindra/rollups-base-reader/pkg/eip712"
+	"github.com/calindra/rollups-base-reader/pkg/transaction"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
@@ -162,7 +163,7 @@ func (c PaioSender2Server) GetNonce(
 	return 0, nil
 }
 
-func NewPaioSender2Server(url string) Sender {
+func NewPaioSender2Server(url string) transaction.Sender {
 	return PaioSender2Server{
 		PaioServerUrl: url,
 	}

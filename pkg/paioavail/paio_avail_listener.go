@@ -46,7 +46,6 @@ type PaioDecoder interface {
 
 func NewAvailListener(availFromBlock uint64, inputService *services.InputService,
 	w *inputreader.InputReaderWorker, fromBlock uint64, binaryDecoderPathLocation string,
-	applicationAddress string,
 ) supervisor.Worker {
 	var paioDecoder PaioDecoder = paiodecoder.ZzzzHuiDecoder{}
 	if binaryDecoderPathLocation != "" {
@@ -296,7 +295,7 @@ func (a AvailListener) TableTennis(ctx context.Context,
 			// The chainId information does not come in Paio's batch.
 			input := inputExtra.Input
 			input.EpochApplicationID = app.ID
-			err = a.InputService.CreateInput(ctx,  input)
+			err = a.InputService.CreateInput(ctx, input)
 			if err != nil {
 				return nil, fmt.Errorf("avail input reader: create input: %w", err)
 			}

@@ -52,7 +52,7 @@ func EncodePaioFormat(sigAndData eip712.SigAndData) (string, error) {
 		"nonce", nonce, "maxGasPrice", maxGasPrice)
 	abiEncoder, err := abi.JSON(strings.NewReader(DEFINITION))
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("failed to parse ABI definition: %w", err)
 	}
 	method, ok := abiEncoder.Methods["signingMessage"]
 	if !ok {
@@ -114,6 +114,16 @@ func ToBig(value interface{}) (*big.Int, error) {
 	return nonce, nil
 }
 
+func NewPaioSender2Server(url string) transaction.Sender {
+	if url == "" {
+		url = "https://cartesi-paio-avail-turing.fly.dev"
+	}
+
+	return PaioSender2Server{
+		PaioServerUrl: url,
+	}
+}
+
 // SubmitSigAndData implements Sender.
 func (p PaioSender2Server) SubmitSigAndData(ctx context.Context, sigAndData eip712.SigAndData) (string, error) {
 	jsonData, err := EncodePaioFormat(sigAndData)
@@ -155,16 +165,7 @@ func (p PaioSender2Server) SubmitSigAndData(ctx context.Context, sigAndData eip7
 	return "", nil
 }
 
-func NewPaioSender2Server(url string) transaction.Sender {
-	if url == "" {
-		url = "https://cartesi-paio-avail-turing.fly.dev"
-	}
-
-	return PaioSender2Server{
-		PaioServerUrl: url,
-	}
-}
-
+// GetNonce implements Sender.
 func (p PaioSender2Server) GetNonce(
 	ctx context.Context,
 	appContract common.Address,

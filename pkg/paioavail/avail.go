@@ -155,16 +155,47 @@ func (p PaioSender2Server) SubmitSigAndData(ctx context.Context, sigAndData eip7
 	return "", nil
 }
 
-func (c PaioSender2Server) GetNonce(
+func NewPaioSender2Server(url string) transaction.Sender {
+	if url == "" {
+		url = "https://cartesi-paio-avail-turing.fly.dev"
+	}
+
+	return PaioSender2Server{
+		PaioServerUrl: url,
+	}
+}
+
+func (p PaioSender2Server) GetNonce(
 	ctx context.Context,
 	appContract common.Address,
 	msgSender common.Address,
 ) (uint64, error) {
-	return 0, nil
-}
-
-func NewPaioSender2Server(url string) transaction.Sender {
-	return PaioSender2Server{
-		PaioServerUrl: url,
+	url := p.PaioServerUrl + "/nonce"
+	payload := map[string]string{
+		"application": appContract.Hex(),
+		"user":        msgSender.Hex(),
 	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("error marshaling json", "error", err)
+		return 0, err
+	}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		slog.Error("error creating request", "error", err)
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		slog.Error("error sending request", "error", err)
+		return 0, err
+	}
+	defer resp.Body.Close()
+	var response transaction.NonceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		slog.Error("error decoding paio's response", "error", err)
+		return 0, err
+	}
+	return uint64(*response.Nonce), nil
 }

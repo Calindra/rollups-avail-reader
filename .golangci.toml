@@ -1,0 +1,17 @@
+version = "2"
+
+[run]
+timeout = "5m"
+
+[output.formats.text]
+print-linter-name = true
+print-issued-lines = true
+colors = true
+
+[linters]
+settings.errcheck.exclude-functions = ["(io.Closer).Close", "(*os.File).Close"]
+exclusions.rules = [
+    { path = "pkg/paioavail", linters = [
+        "staticcheck",
+    ], text = "QF1008:" },
+]

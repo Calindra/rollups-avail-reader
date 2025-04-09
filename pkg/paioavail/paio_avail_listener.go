@@ -11,10 +11,11 @@ import (
 	"github.com/calindra/rollups-base-reader/pkg/contracts"
 	"github.com/calindra/rollups-base-reader/pkg/eip712"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
+	"github.com/calindra/rollups-base-reader/pkg/model"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
+	"github.com/calindra/rollups-base-reader/pkg/services"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
 	cModel "github.com/cartesi/rollups-graphql/pkg/convenience/model"
-	cRepos "github.com/cartesi/rollups-graphql/pkg/convenience/repository"
 	gsrpc "github.com/centrifuge/go-substrate-rpc-client/v4"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -30,21 +31,20 @@ const (
 )
 
 type AvailListener struct {
-	PaioDecoder        paiodecoder.DecoderPaio
-	InputRepository    *cRepos.InputRepository
-	InputReaderWorker  *inputreader.InputReaderWorker
-	FromBlock          uint64
-	AvailFromBlock     uint64
-	L1CurrentBlock     uint64
-	ApplicationAddress common.Address
-	L1ReadDelay        int
+	PaioDecoder       paiodecoder.DecoderPaio
+	InputService      *services.InputService
+	InputReaderWorker *inputreader.InputReaderWorker
+	FromBlock         uint64
+	AvailFromBlock    uint64
+	L1CurrentBlock    uint64
+	L1ReadDelay       int
 }
 
 type PaioDecoder interface {
 	DecodePaioBatch(ctx context.Context, bytes []byte) (string, error)
 }
 
-func NewAvailListener(availFromBlock uint64, repository *cRepos.InputRepository,
+func NewAvailListener(availFromBlock uint64, inputService *services.InputService,
 	w *inputreader.InputReaderWorker, fromBlock uint64, binaryDecoderPathLocation string,
 	applicationAddress string,
 ) supervisor.Worker {
@@ -63,13 +63,12 @@ func NewAvailListener(availFromBlock uint64, repository *cRepos.InputRepository,
 		l1ReadDelay = aux
 	}
 	return AvailListener{
-		AvailFromBlock:     availFromBlock,
-		InputRepository:    repository,
-		InputReaderWorker:  w,
-		PaioDecoder:        paioDecoder,
-		L1CurrentBlock:     fromBlock,
-		ApplicationAddress: common.HexToAddress(applicationAddress),
-		L1ReadDelay:        l1ReadDelay,
+		AvailFromBlock:    availFromBlock,
+		InputService:      inputService,
+		InputReaderWorker: w,
+		L1CurrentBlock:    fromBlock,
+		L1ReadDelay:       l1ReadDelay,
+		PaioDecoder:       paioDecoder,
 	}
 }
 
@@ -234,6 +233,17 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 func (a AvailListener) TableTennis(ctx context.Context,
 	block *types.SignedBlock, ethClient *ethclient.Client,
 	inputBox *contracts.InputBox, startBlockNumber uint64) (*uint64, error) {
+	apps, err := a.InputService.AppRepository.FindAllByDA(ctx, model.DataAvailability_Avail)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve applications by avail data availability: %w", err)
+	}
+	if len(apps) == 0 {
+		slog.Debug("No applications found for the specified data availability")
+	}
+	appAddresses := make([]common.Address, len(apps))
+	for i, app := range apps {
+		appAddresses[i] = app.IApplicationAddress
+	}
 
 	var currentL1Block uint64
 	availInputs, err := a.ReadInputsFromPaioBlock(ctx, block)
@@ -252,6 +262,7 @@ func (a AvailListener) TableTennis(ctx context.Context,
 	inputsL1, err := a.InputReaderWorker.FindAllInputsByBlockAndTimestampLT(ctx,
 		ethClient, inputBox, startBlockNumber,
 		(availBlockTimestamp/ONE_SECOND_IN_MS)-uint64(a.L1ReadDelay),
+		appAddresses,
 	)
 	if err != nil {
 		return nil, err
@@ -261,40 +272,46 @@ func (a AvailListener) TableTennis(ctx context.Context,
 	}
 	inputs := append(inputsL1, availInputs...)
 	if len(inputs) > 0 {
-		inputCount, err := a.InputRepository.Count(ctx, nil)
+		inputCount, err := a.InputService.InputRepository.Count(ctx, nil)
 		if err != nil {
 			return nil, err
 		}
 		for i := range inputs {
-			inputs[i].Index = i + int(inputCount)
-			if inputs[i].AppContract != a.ApplicationAddress {
+			inputExtra := inputs[i]
+			inputExtra.Input.Index = uint64(i) + inputCount
+			var app *model.Application = nil
+			for _, appr := range apps {
+				if inputExtra.AppContract.Hex() == appr.IApplicationAddress.Hex() {
+					app = &appr
+					break
+				}
+			}
+			if app == nil {
 				slog.Warn("Skipping input",
-					"appContract", inputs[i].AppContract.Hex(),
-					"expected", a.ApplicationAddress.Hex(),
-					"msgSender", inputs[i].MsgSender.Hex(),
-					"payload", inputs[i].Payload,
+					"appContract", inputExtra.AppContract.Hex(),
+					"expected", apps,
 				)
 				continue
 			}
 			// The chainId information does not come in Paio's batch.
-			_, err = a.InputRepository.Create(ctx, inputs[i])
+			input := inputExtra.Input
+			input.EpochApplicationID = app.ID
+			err = a.InputService.CreateInput(ctx,  input)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("avail input reader: create input: %w", err)
 			}
 			slog.Info("Input saved",
-				"ID", inputs[i].ID,
-				"index", inputs[i].Index,
-				"appContract", inputs[i].AppContract.Hex(),
-				"msgSender", inputs[i].MsgSender.Hex(),
-				"payload", inputs[i].Payload,
+				"index", input.Index,
+				"appID", input.EpochApplicationID,
+				"payload", input.RawData,
 			)
 		}
 	}
 	return &currentL1Block, nil
 }
 
-func (av *AvailListener) ReadInputsFromPaioBlock(ctx context.Context, block *types.SignedBlock) ([]cModel.AdvanceInput, error) {
-	inputs := []cModel.AdvanceInput{}
+func (av *AvailListener) ReadInputsFromPaioBlock(ctx context.Context, block *types.SignedBlock) ([]model.InputExtra, error) {
+	inputs := []model.InputExtra{}
 	timestamp, err := ReadTimestampFromBlock(block)
 	if err != nil {
 		return inputs, err

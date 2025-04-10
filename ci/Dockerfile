@@ -1,7 +1,6 @@
+# syntax=docker.io/docker/dockerfile:1
 # (c) Cartesi and individual authors (see AUTHORS)
 # SPDX-License-Identifier: Apache-2.0 (see LICENSE)
-
-# syntax=docker.io/docker/dockerfile:1
 
 ARG EMULATOR_VERSION=0.18.1
 

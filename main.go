@@ -124,9 +124,9 @@ const (
 func CreateDBInstance() *sqlx.DB {
 	var db *sqlx.DB
 	slog.Info("Using PostGres DB ...")
-	dbUrl, ok := os.LookupEnv("POSTGRES_NODE_DB_URL")
+	dbUrl, ok := os.LookupEnv("CARTESI_DATABASE_CONNECTION")
 	if !ok {
-		log.Fatal("POSTGRES_NODE_DB_URL not set")
+		log.Fatal("CARTESI_DATABASE_CONNECTION not set")
 	}
 	db = sqlx.MustConnect("postgres", dbUrl)
 	configureConnectionPool(db)

@@ -113,10 +113,6 @@ jobs:
           docker save cartesi/rollups-node-devnet:devel -o docker-devnet-image.tar
           docker save avail-reader -o docker-avail-reader-image.tar
 
-      - name: Tar DB bindings
-        run: |
-          tar -czf rollupsdb-postgres-bindings.tar.gz internal/repository/postgres/db/
-
       - name: Upload Docker image
         uses: actions/upload-artifact@v4
         with:

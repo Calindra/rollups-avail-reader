@@ -155,7 +155,7 @@ jobs:
       - name: Wait for PostgreSQL to be ready
         run: |
           for i in {1..30}; do
-            if pg_isready -h localhost -p 5433 -U postgres; then
+            if pg_isready -h localhost -p 5432 -U postgres; then
               echo "PostgreSQL is ready";
               exit 0;
             fi;

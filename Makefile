@@ -21,3 +21,6 @@ gen:
 check-gen: gen
 	git diff --quiet
 
+build-ci:
+	docker build --build-arg TARGETARCH=amd64 -t espresso -f ./ci/Dockerfile .
+

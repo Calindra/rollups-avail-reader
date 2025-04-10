@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -12,13 +10,11 @@ import (
 
 	"github.com/calindra/rollups-avail-reader/pkg/paioavail"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
-	"github.com/calindra/rollups-base-reader/pkg/model"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/services"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
 	"github.com/calindra/rollups-base-reader/pkg/transaction"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -33,14 +29,10 @@ func main() {
 	var w supervisor.SupervisorWorker
 	ctx := context.Background()
 	startTime := time.Now()
-	// rpcURL := "ws://0.0.0.0:8545"
-	// rpcURL := "wss://ethereum-sepolia-rpc.publicnode.com"
-	rpcURL := "https://eth-sepolia.g.alchemy.com/v2/"
-	apiKey := os.Getenv("ALCHEMY_API_KEY")
-	if apiKey == "" {
-		log.Fatal("ALCHEMY_API_KEY not set")
+	rpcURL := os.Getenv("CARTESI_BLOCKCHAIN_WS_ENDPOINT")
+	if rpcURL == "" {
+		log.Fatal("CARTESI_BLOCKCHAIN_WS_ENDPOINT not set")
 	}
-	rpcURL += apiKey
 
 	// setup log
 	logOpts := new(tint.Options)
@@ -89,45 +81,6 @@ func main() {
 
 	inputReaderWorker := &inputreader.InputReaderWorker{
 		Provider: rpcURL,
-	}
-
-	// only for testing purpose
-	{
-		var dapp *model.Application
-
-		// add application to DataAvailability_Avail
-		addressAvail := common.HexToAddress("0x2291ba684ea6bCA81caCE56fcc1194A84086C912")
-
-		dapp, err = appRepository.FindOneByContract(ctx, addressAvail)
-
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			log.Fatal("Failed to find application:", err)
-		}
-
-		if dapp == nil {
-			daHex := common.Bytes2Hex(model.DataAvailability_Avail[:])
-			slog.Debug("Update application", "daHex", daHex)
-			query := `UPDATE
-			application SET
-				iapplication_address = decode($1, 'hex'),
-				data_availability = decode($2, 'hex')`
-			args := []any{addressAvail.Hex()[2:], daHex}
-
-			tx, err := db.BeginTxx(ctx, nil)
-			if err != nil {
-				log.Fatal("Failed to begin transaction:", err)
-			}
-			defer func() { _ = tx.Rollback() }()
-
-			_, err = tx.ExecContext(ctx, query, args...)
-			if err != nil {
-				log.Fatal("Failed to update application:", err)
-			}
-			if err := tx.Commit(); err != nil {
-				log.Fatal("Failed to commit transaction:", err)
-			}
-		}
-
 	}
 
 	availFromBlock := uint64(1005768)

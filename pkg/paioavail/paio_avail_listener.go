@@ -180,9 +180,9 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 						index++
 
 						if latestAvailBlock < uint64(i.Number) {
-							slog.Debug("Avail Catching up", "Chain is at block", i.Number, "fetching block", latestAvailBlock)
+							slog.Info("Avail Catching up", "Chain is at block", i.Number, "fetching block", latestAvailBlock)
 						} else {
-							slog.Debug("Avail", "index", index, "Chain is at block", i.Number, "fetching block", latestAvailBlock)
+							slog.Info("Avail", "index", index, "Chain is at block", i.Number, "fetching block", latestAvailBlock)
 						}
 
 						blockHash, err := client.RPC.Chain.GetBlockHash(latestAvailBlock)

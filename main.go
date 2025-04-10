@@ -19,7 +19,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/lmittmann/tint"
-	"github.com/mattn/go-isatty"
 	"github.com/spf13/cast"
 )
 
@@ -38,7 +37,7 @@ func main() {
 	logOpts := new(tint.Options)
 	logOpts.Level = slog.LevelDebug
 	logOpts.AddSource = true
-	logOpts.NoColor = !isatty.IsTerminal(os.Stdout.Fd())
+	logOpts.NoColor = false
 	logOpts.TimeFormat = "[15:04:05.000]"
 	handler := tint.NewHandler(os.Stdout, logOpts)
 	logger := slog.New(handler)

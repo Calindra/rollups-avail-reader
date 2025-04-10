@@ -236,12 +236,6 @@ jobs:
           sleep 10
           docker logs --timestamps c_avail
 
-      - name: Espresso dev node logs
-        run: docker logs --timestamps espresso-dev-node
-
-      - name: Espresso dev node debug hotshot.header
-        run: docker exec -i espresso-dev-node psql -U root -d root -t -c "SELECT height, timestamp FROM hotshot.header ORDER BY height;"
-
       - name: Query Database for Output
         run: |
           MAX_RETRIES=30
@@ -257,8 +251,6 @@ jobs:
           done
           echo "Timeout reached: result not found"
           docker logs --timestamps c_avail
-          echo "Debug: hotshot.header table"
-          docker exec -i espresso-dev-node psql -U root -d root -t -c "SELECT height, timestamp FROM hotshot.header ORDER BY height;"
           exit 1
 
   release:

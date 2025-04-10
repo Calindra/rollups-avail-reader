@@ -226,7 +226,7 @@ jobs:
 
       - name: Send input transaction
         env:
-          SENDER_PRIVATE_KEY: 'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+          SENDER_PRIVATE_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
           TRANSACTION_BASE_URL: http://localhost:8080
         run: |
           git clone --recurse-submodules https://github.com/Calindra/nonodo.git

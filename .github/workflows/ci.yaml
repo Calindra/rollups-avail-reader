@@ -220,7 +220,7 @@ jobs:
           PRIVATE_KEY: 'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
           RPC_URL: 'http://localhost:8545'
         run: |
-          docker exec c_avail cartesi-rollups-cli app deploy -n echo-dapp -t applications/echo-dapp/ -v -D 0x61766461
+          docker exec c_avail cartesi-rollups-cli app deploy -n echo-dapp -t applications/echo-dapp/ -v -D 0x8579fd0c000000000000000000000000b6b39fb3dd926a9e3fbc7a129540eebea3016a6c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d903
           sleep 10
           docker logs --timestamps c_avail
 

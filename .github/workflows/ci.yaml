@@ -207,7 +207,7 @@ jobs:
           CARTESI_BLOCKCHAIN_WS_ENDPOINT: ${{ secrets.CARTESI_BLOCKCHAIN_WS_ENDPOINT }}
           CARTESI_DATABASE_CONNECTION: 'postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable'
         run: |
-          docker run -d --env-file ./ci/env.nodev2-espressolocal \
+          docker run -d --env-file ./ci/env.nodev2-availlocal \
             -e CARTESI_DATABASE_CONNECTION=$CARTESI_DATABASE_CONNECTION \
             --rm --network=host \
             --name c_avail avail-reader

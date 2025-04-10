@@ -152,12 +152,6 @@ jobs:
         with:
           name: db-dump
 
-      - name: Restore DB bindings
-        run: |
-          docker ps
-          mkdir -p internal/repository/postgres/db/
-          tar -xzf rollupsdb-postgres-bindings.tar.gz
-
       - name: Wait for PostgreSQL to be ready
         run: |
           for i in {1..30}; do

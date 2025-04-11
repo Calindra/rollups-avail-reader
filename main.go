@@ -82,7 +82,7 @@ func main() {
 		Provider: rpcURL,
 	}
 
-	availFromBlock := uint64(1630753 - 50)
+	availFromBlock := uint64(1630753 - 25)
 
 	listener := paioavail.NewAvailListener(availFromBlock, inputService, inputReaderWorker, 0, paioPath)
 

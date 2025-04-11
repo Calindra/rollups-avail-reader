@@ -44,6 +44,8 @@ github.com/calindra/rollups-base-reader v0.0.2-0.20250410225619-eb6a08520a02 h1:
 github.com/calindra/rollups-base-reader v0.0.2-0.20250410225619-eb6a08520a02/go.mod h1:xIMZh1ePuLnAeg2fY/GEt6zEg3wxZW4kEdlVoym4rsU=
 github.com/calindra/rollups-base-reader v0.0.2-0.20250410230211-e6460e8cd1b6 h1:UaLghMprtCqRb2eM/IA/WcsCw9Ez2IxDeY5LsHElC84=
 github.com/calindra/rollups-base-reader v0.0.2-0.20250410230211-e6460e8cd1b6/go.mod h1:xIMZh1ePuLnAeg2fY/GEt6zEg3wxZW4kEdlVoym4rsU=
+github.com/calindra/rollups-base-reader v0.0.2-0.20250411000431-164f688ce14f h1:AiiJpcukURQJ/QtP8qYgjs7YgUfZlKEn5NxXGKoNoW4=
+github.com/calindra/rollups-base-reader v0.0.2-0.20250411000431-164f688ce14f/go.mod h1:xIMZh1ePuLnAeg2fY/GEt6zEg3wxZW4kEdlVoym4rsU=
 github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85 h1:jXPVMlsaeEsLphI06h7WPCYo2N10uLQJ3bG+dJIO7Ms=
 github.com/cartesi/rollups-graphql v0.0.0-20250307213403-a46706408c85/go.mod h1:9qwjcErHHnH2CeW9QlRuOXdfj59Nl721VeLFaOyjZ9w=
 github.com/cenkalti/backoff/v4 v4.2.1 h1:y4OZtCnogmCPw98Zjyt5a6+QwPLGkiQsYW5oUqylYbM=

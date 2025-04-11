@@ -237,6 +237,8 @@ jobs:
           docker logs --timestamps c_avail
 
       - name: Query Database for Output
+        continue-on-error: true
+        id: teststep
         run: |
           MAX_RETRIES=30
           for i in $(seq 1 $MAX_RETRIES); do
@@ -251,7 +253,7 @@ jobs:
           done
           echo "Timeout reached: result not found"
           docker logs --timestamps c_avail
-          # exit 1
+          exit 1
 
       - name: Dump database
         env:
@@ -264,6 +266,10 @@ jobs:
         with:
           name: db-dump
           path: rollupsdb-*
+
+      - name: Upload dump
+        if: ${{ steps.teststep.outcome == 'failure' }}
+        run: exit 1
 
   release:
     name: Release

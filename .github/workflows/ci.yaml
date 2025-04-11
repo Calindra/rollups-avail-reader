@@ -259,13 +259,13 @@ jobs:
         env:
           PGPASSWORD: password
         run: |
-          pg_dump -h localhost -U postgres -d rollupsdb > rollupsdb-dump-after-tests.sql
+          pg_dump -h localhost -U postgres -d rollupsdb > result-rollupsdb-dump.sql
 
       - name: Upload database dump
         uses: actions/upload-artifact@v4
         with:
-          name: db-dump
-          path: rollupsdb-*
+          name: result-db-dump
+          path: result-rollupsdb-*
 
       - name: Upload dump
         if: ${{ steps.teststep.outcome == 'failure' }}

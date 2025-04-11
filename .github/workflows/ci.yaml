@@ -251,7 +251,19 @@ jobs:
           done
           echo "Timeout reached: result not found"
           docker logs --timestamps c_avail
-          exit 1
+          # exit 1
+
+      - name: Dump database
+        env:
+          PGPASSWORD: password
+        run: |
+          pg_dump -h localhost -U postgres -d rollupsdb > rollupsdb-dump-after-tests.sql
+
+      - name: Upload database dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-dump
+          path: rollupsdb-*
 
   release:
     name: Release

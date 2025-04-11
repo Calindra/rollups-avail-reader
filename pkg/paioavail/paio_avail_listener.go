@@ -2,6 +2,7 @@ package paioavail
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -319,6 +320,9 @@ func (a AvailListener) TableTennis(ctx context.Context,
 			}
 
 			input.RawData = rawData
+			if input.TransactionReference == nil {
+				input.TransactionReference = Uint64ToHash(inputExtra.Input.Index)
+			}
 
 			err = a.InputService.CreateInput(ctx, input)
 			if err != nil {
@@ -405,4 +409,10 @@ func ReadInputsFromAvailBlockZzzHui(block *types.SignedBlock) ([]cModel.AdvanceI
 		})
 	}
 	return inputs, nil
+}
+
+func Uint64ToHash(value uint64) *common.Hash {
+	var hash common.Hash
+	binary.BigEndian.PutUint64(hash[0:8], value)
+	return &hash
 }

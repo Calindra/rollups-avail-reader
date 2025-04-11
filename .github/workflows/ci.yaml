@@ -267,7 +267,7 @@ jobs:
           name: result-db-dump
           path: result-rollupsdb-*
 
-      - name: Upload dump
+      - name: Mark as Failed when db output is failed
         if: ${{ steps.teststep.outcome == 'failure' }}
         run: exit 1
 

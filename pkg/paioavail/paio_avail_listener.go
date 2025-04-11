@@ -331,7 +331,7 @@ func (a AvailListener) TableTennis(ctx context.Context,
 			slog.Info("Input saved",
 				"index", input.Index,
 				"appID", input.EpochApplicationID,
-				"payload", input.RawData,
+				"payload", common.Bytes2Hex(input.RawData),
 			)
 		}
 	}

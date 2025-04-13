@@ -5,6 +5,10 @@ all: | lint build test
 build:
 	go build ./...
 
+.PHONY: build-bin
+build-bin:
+	go build .
+
 .PHONY: test
 test:
 	go test --timeout 1m -p 1 ./...

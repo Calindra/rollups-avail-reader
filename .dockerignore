@@ -2,6 +2,9 @@
 .git
 .gitignore
 
+# Avoid somebody pre created the binary in application.
+./rollups-avail-reader
+
 # Docker
 docker/
 Dockerfile
@@ -10,7 +13,6 @@ Dockerfile
 # Environment files
 .env
 .env.*
-!.env.example
 
 # Build artifacts
 bin/

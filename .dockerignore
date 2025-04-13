@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+
+# Docker
+docker/
+Dockerfile
+.dockerignore
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+bin/
+dist/
+
+# Development tools
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# OS specific
+.DS_Store
+Thumbs.db

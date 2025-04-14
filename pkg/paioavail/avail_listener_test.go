@@ -131,6 +131,8 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
 }
 
 func (s *AvailListenerSuite) TestTableTennis() {
+	ctx, ctxCancel := context.WithCancel(s.ctx)
+	defer ctxCancel()
 	dataavailability := model.DataAvailability_Avail
 
 	// List all applications
@@ -166,7 +168,6 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	inputBoxAddress := common.HexToAddress(devnet.InputBoxAddress)
 	inputBox, err := contracts.NewInputBox(inputBoxAddress, ethClient)
 	s.NoError(err)
-	ctx := context.Background()
 	err = devnet.AddInput(ctx, s.rpcUrl, common.Hex2Bytes("deadbeef11"), appAddress)
 	s.NoError(err)
 
@@ -328,6 +329,8 @@ func (s *AvailListenerSuite) SetupTest() {
 }
 
 func (s *AvailListenerSuite) TearDownTest() {
+	testcontainers.CleanupContainer(s.T(), s.image.Container)
+	defer s.timeoutCancel()
 	if s.DbFactory != nil {
 		defer s.DbFactory.Cleanup()
 	}
@@ -340,7 +343,13 @@ func (s *AvailListenerSuite) TearDownTest() {
 	case err := <-s.workerResult:
 		s.NoError(err)
 	}
-	s.timeoutCancel()
+}
+
+func (s *AvailListenerSuite) TearDownSuite() {
+	// Remove schema
+	parentPath := filepath.Dir(s.schemaPath)
+	err := os.RemoveAll(parentPath)
+	s.NoError(err)
 }
 
 // nolint

@@ -19,7 +19,6 @@ import (
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
 	"github.com/calindra/rollups-base-reader/pkg/model"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
-	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/services"
 	"github.com/jmoiron/sqlx"
 
@@ -38,18 +37,16 @@ import (
 
 type AvailListenerSuite struct {
 	suite.Suite
-	testTimeout     time.Duration
-	fd              paiodecoder.DecoderPaio
-	ctx             context.Context
-	timeoutCancel   context.CancelFunc
-	rpcUrl          string
-	DbFactory       *commons.DbFactory
-	appRepository   repository.AppRepositoryInterface
-	epochRepository repository.EpochRepositoryInterface
-	inputRepository repository.InputRepositoryInterface
-	anvilC          *devnet.FoundryContainer
-	postgresC       *postgres.PostgresContainer
-	schemaPath      string
+	testTimeout   time.Duration
+	fd            paiodecoder.DecoderPaio
+	ctx           context.Context
+	timeoutCancel context.CancelFunc
+	rpcUrl        string
+	DbFactory     *commons.DbFactory
+	inputService  *services.InputService
+	anvilC        *devnet.FoundryContainer
+	postgresC     *postgres.PostgresContainer
+	schemaPath    string
 }
 
 func TestAvailListenerSuite(t *testing.T) {
@@ -106,9 +103,7 @@ func (s *AvailListenerSuite) SetupTest() {
 	db, err := sqlx.ConnectContext(s.ctx, "postgres", connectionStr)
 	s.NoError(err)
 
-	s.appRepository = repository.NewAppRepository(db)
-	s.inputRepository = repository.NewInputRepository(db)
-	s.epochRepository = repository.NewEpochRepository(db)
+	s.inputService = services.NewInputService(db)
 
 	s.rpcUrl, err = s.anvilC.URI(s.ctx)
 	s.NoError(err)
@@ -175,17 +170,17 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	dataavailability := model.DataAvailability_Avail
 
 	// List all applications
-	apps, err := s.appRepository.List(ctx)
+	apps, err := s.inputService.AppRepository.List(ctx)
 	s.NoError(err)
 	s.Require().NotEmpty(apps)
 
 	// Change DA from application to Avail
 	firstDapp := apps[0]
-	err = s.appRepository.UpdateDA(ctx, firstDapp.ID, dataavailability)
+	err = s.inputService.AppRepository.UpdateDA(ctx, firstDapp.ID, dataavailability)
 	s.NoError(err)
 
 	// check if the DA was updated
-	apps, err = s.appRepository.FindAllByDA(ctx, dataavailability)
+	apps, err = s.inputService.AppRepository.FindAllByDA(ctx, dataavailability)
 	s.NoError(err)
 	s.Require().NotEmpty(apps)
 	s.Equal(firstDapp.ID, apps[0].ID)
@@ -233,12 +228,11 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	block.Block.Extrinsics = append(block.Block.Extrinsics, extrinsicPaioBlock)
 
 	var fd paiodecoder.DecoderPaio = &FakeDecoder{}
-	inputService := services.NewInputService(s.inputRepository, s.epochRepository, s.appRepository)
 
 	availListener := AvailListener{
 		PaioDecoder:       fd,
 		InputReaderWorker: &inputterWorker,
-		InputService:      inputService,
+		InputService:      s.inputService,
 	}
 	inputs, err := availListener.ReadInputsFromPaioBlock(ctx, &block)
 	s.NoError(err)
@@ -250,7 +244,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	s.NotNil(inputs)
 	s.Equal(1, len(inputs))
 
-	savedInputsBeforeTableTennis, err := s.inputRepository.FindAll(ctx, nil, nil, nil, nil, nil)
+	savedInputsBeforeTableTennis, err := s.inputService.InputRepository.FindAll(ctx, nil, nil, nil, nil, nil)
 	s.NoError(err)
 	s.Equal(101, int(savedInputsBeforeTableTennis.Total))
 
@@ -261,7 +255,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 
 	// check if TableTennis has saved the data.
 	lastTwoInputs := 2
-	savedInputs, err := s.inputRepository.FindAll(ctx, nil, &lastTwoInputs, nil, nil, nil)
+	savedInputs, err := s.inputService.InputRepository.FindAll(ctx, nil, &lastTwoInputs, nil, nil, nil)
 	s.NoError(err)
 	s.Equal(103, int(savedInputs.Total))
 

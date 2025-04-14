@@ -12,7 +12,7 @@ colors = true
 settings.errcheck.exclude-functions = [
     "(io.Closer).Close",
     "(*os.File).Close",
-    "(*github.com/jmoiron/sqlx.Tx).Rollback",
+    "(*database/sql.Tx).Rollback",
 ]
 exclusions.rules = [
     { path = "pkg/paioavail", linters = [

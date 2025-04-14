@@ -271,41 +271,43 @@ func (a AvailListener) TableTennis(ctx context.Context,
 		currentL1Block = inputsL1[len(inputsL1)-1].BlockNumber + 1
 	}
 	inputs := append(inputsL1, availInputs...)
-	if len(inputs) > 0 {
-		inputCount, err := a.InputService.InputRepository.Count(ctx, nil)
-		if err != nil {
-			return nil, err
+	if len(inputs) == 0 {
+		slog.Debug("No inputs found for the specified data availability")
+		return &currentL1Block, nil
+	}
+	inputCount, err := a.InputService.InputRepository.Count(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	for i := range inputs {
+		inputExtra := inputs[i]
+		inputExtra.Input.Index = uint64(i) + inputCount
+		var app *model.Application = nil
+		for _, appr := range apps {
+			if inputExtra.AppContract.Hex() == appr.IApplicationAddress.Hex() {
+				app = &appr
+				break
+			}
 		}
-		for i := range inputs {
-			inputExtra := inputs[i]
-			inputExtra.Input.Index = uint64(i) + inputCount
-			var app *model.Application = nil
-			for _, appr := range apps {
-				if inputExtra.AppContract.Hex() == appr.IApplicationAddress.Hex() {
-					app = &appr
-					break
-				}
-			}
-			if app == nil {
-				slog.Warn("Skipping input",
-					"appContract", inputExtra.AppContract.Hex(),
-					"expected", apps,
-				)
-				continue
-			}
-			// The chainId information does not come in Paio's batch.
-			input := inputExtra.Input
-			input.EpochApplicationID = app.ID
-			err = a.InputService.CreateInput(ctx,  input)
-			if err != nil {
-				return nil, fmt.Errorf("avail input reader: create input: %w", err)
-			}
-			slog.Info("Input saved",
-				"index", input.Index,
-				"appID", input.EpochApplicationID,
-				"payload", input.RawData,
+		if app == nil {
+			slog.Warn("Skipping input",
+				"appContract", inputExtra.AppContract.Hex(),
+				"expected", apps,
 			)
+			continue
 		}
+		// The chainId information does not come in Paio's batch.
+		input := inputExtra.Input
+		input.EpochApplicationID = app.ID
+		err = a.InputService.CreateInput(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("avail input reader: create input: %w", err)
+		}
+		slog.Info("Input saved",
+			"index", input.Index,
+			"appID", input.EpochApplicationID,
+			"payload", input.RawData,
+		)
 	}
 	return &currentL1Block, nil
 }

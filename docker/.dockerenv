@@ -1,9 +1,9 @@
 # Required Configuration
 
 ## WebSocket endpoint for the blockchain connection
-CARTESI_BLOCKCHAIN_WS_ENDPOINT=
+CARTESI_BLOCKCHAIN_WS_ENDPOINT=ws://localhost:8545
 ## PostgreSQL connection string
-CARTESI_DATABASE_CONNECTION=
+CARTESI_DATABASE_CONNECTION=postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable
 
 
 # Server Configuration

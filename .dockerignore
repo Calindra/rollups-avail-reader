@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Avoid somebody pre created the binary in application.
+./rollups-avail-reader
+
+# Docker
+docker/
+Dockerfile
+.dockerignore
+
+# Environment files
+.env
+.env.*
+
+# Build artifacts
+bin/
+dist/
+
+# Development tools
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# OS specific
+.DS_Store
+Thumbs.db

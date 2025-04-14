@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,7 +21,6 @@ import (
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
 	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/services"
-	"github.com/calindra/rollups-base-reader/pkg/supervisor"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
@@ -40,19 +38,17 @@ import (
 
 type AvailListenerSuite struct {
 	suite.Suite
+	testTimeout     time.Duration
 	fd              paiodecoder.DecoderPaio
 	ctx             context.Context
-	workerCtx       context.Context
 	timeoutCancel   context.CancelFunc
-	workerCancel    context.CancelFunc
-	workerResult    chan error
 	rpcUrl          string
-	portCounter     int
 	DbFactory       *commons.DbFactory
-	appRepository   *repository.AppRepository
-	epochRepository *repository.EpochRepository
-	inputRepository *repository.InputRepository
-	image           *postgres.PostgresContainer
+	appRepository   repository.AppRepositoryInterface
+	epochRepository repository.EpochRepositoryInterface
+	inputRepository repository.InputRepositoryInterface
+	anvilC          *devnet.FoundryContainer
+	postgresC       *postgres.PostgresContainer
 	schemaPath      string
 }
 
@@ -74,6 +70,47 @@ func (s *AvailListenerSuite) SetupSuite() {
 	defer resp.Body.Close()
 
 	_, err = io.Copy(schemaFile, resp.Body)
+	s.NoError(err)
+}
+
+func (s *AvailListenerSuite) SetupTest() {
+	commons.ConfigureLog(slog.LevelDebug)
+	var err error
+	s.testTimeout = 20 * time.Second
+	s.ctx, s.timeoutCancel = context.WithTimeout(context.Background(), s.testTimeout)
+	s.fd = &FakeDecoder{}
+
+	// Start Anvil
+	s.anvilC, err = devnet.SetupFoundryStable(s.ctx, testcontainers.WithLogConsumers(&commons.StdoutLogConsumer{}))
+	s.Require().NoError(err)
+	s.NotNil(s.anvilC)
+	err = s.anvilC.Start(s.ctx)
+	s.NoError(err)
+
+	// Database
+	s.postgresC, err = postgres.Run(s.ctx, commons.DbImage,
+		postgres.BasicWaitStrategies(),
+		postgres.WithInitScripts(s.schemaPath),
+		postgres.WithDatabase(commons.DbName),
+		postgres.WithUsername(commons.DbUser),
+		postgres.WithPassword(commons.DbPassword),
+		testcontainers.WithLogConsumers(&commons.StdoutLogConsumer{}),
+	)
+	s.NoError(err)
+	extraArg := "sslmode=disable"
+	connectionStr, err := s.postgresC.ConnectionString(s.ctx, extraArg)
+	s.NoError(err)
+	err = s.postgresC.Start(s.ctx)
+	s.NoError(err)
+
+	db, err := sqlx.ConnectContext(s.ctx, "postgres", connectionStr)
+	s.NoError(err)
+
+	s.appRepository = repository.NewAppRepository(db)
+	s.inputRepository = repository.NewInputRepository(db)
+	s.epochRepository = repository.NewEpochRepository(db)
+
+	s.rpcUrl, err = s.anvilC.URI(s.ctx)
 	s.NoError(err)
 }
 
@@ -111,6 +148,8 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockZzzHui() {
 }
 
 func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
+	ctx, ctxCancel := context.WithCancel(s.ctx)
+	defer ctxCancel()
 	block := types.SignedBlock{}
 	block.Block = types.Block{}
 	timestampExtrinsic := CreateTimestampExtrinsic()
@@ -125,7 +164,7 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
 			Provider: s.rpcUrl,
 		},
 	}
-	inputs, err := availListener.ReadInputsFromPaioBlock(s.ctx, &block)
+	inputs, err := availListener.ReadInputsFromPaioBlock(ctx, &block)
 	s.NoError(err)
 	s.Equal(1, len(inputs))
 }
@@ -136,17 +175,17 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	dataavailability := model.DataAvailability_Avail
 
 	// List all applications
-	apps, err := s.appRepository.List(s.ctx)
+	apps, err := s.appRepository.List(ctx)
 	s.NoError(err)
 	s.Require().NotEmpty(apps)
 
 	// Change DA from application to Avail
 	firstDapp := apps[0]
-	err = s.appRepository.UpdateDA(s.ctx, firstDapp.ID, dataavailability)
+	err = s.appRepository.UpdateDA(ctx, firstDapp.ID, dataavailability)
 	s.NoError(err)
 
 	// check if the DA was updated
-	apps, err = s.appRepository.FindAllByDA(s.ctx, dataavailability)
+	apps, err = s.appRepository.FindAllByDA(ctx, dataavailability)
 	s.NoError(err)
 	s.Require().NotEmpty(apps)
 	s.Equal(firstDapp.ID, apps[0].ID)
@@ -163,7 +202,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	appAddress := "0x8e3c7bF65833ccb1755dAB530Ef0405644FE6ae3"
 	s.Contains(appAddresses, common.HexToAddress(appAddress))
 
-	ethClient, err := ethclient.DialContext(s.ctx, s.rpcUrl)
+	ethClient, err := ethclient.DialContext(ctx, s.rpcUrl)
 	s.NoError(err)
 	inputBoxAddress := common.HexToAddress(devnet.InputBoxAddress)
 	inputBox, err := contracts.NewInputBox(inputBoxAddress, ethClient)
@@ -216,7 +255,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	s.Equal(101, int(savedInputsBeforeTableTennis.Total))
 
 	startBlock := 0
-	currentL1Block, err := availListener.TableTennis(s.ctx, &block, ethClient, inputBox, uint64(startBlock))
+	currentL1Block, err := availListener.TableTennis(ctx, &block, ethClient, inputBox, uint64(startBlock))
 	s.Require().NoError(err)
 	s.NotNil(currentL1Block)
 
@@ -272,76 +311,12 @@ func CreateTimestampExtrinsic() types.Extrinsic {
 	}
 }
 
-func (s *AvailListenerSuite) SetupTest() {
-	commons.ConfigureLog(slog.LevelDebug)
-	var w supervisor.SupervisorWorker
-	w.Name = "SupervisorWorker"
-	const testTimeout = 1 * time.Minute
-	s.portCounter += 1
-	s.ctx, s.timeoutCancel = context.WithTimeout(context.Background(), testTimeout)
-	s.workerResult = make(chan error)
-	s.fd = &FakeDecoder{}
-	s.workerCtx, s.workerCancel = context.WithCancel(s.ctx)
-	w.Workers = append(w.Workers, devnet.AnvilWorker{
-		Address:  devnet.AnvilDefaultAddress,
-		Port:     devnet.AnvilDefaultPort + s.portCounter,
-		Verbose:  true,
-		AnvilCmd: "anvil",
-	})
-
-	// Database
-	container, err := postgres.Run(s.ctx, commons.DbImage,
-		postgres.BasicWaitStrategies(),
-		postgres.WithInitScripts(s.schemaPath),
-		postgres.WithDatabase(commons.DbName),
-		postgres.WithUsername(commons.DbUser),
-		postgres.WithPassword(commons.DbPassword),
-		testcontainers.WithLogConsumers(&commons.StdoutLogConsumer{}),
-	)
-	s.NoError(err)
-	extraArg := "sslmode=disable"
-	connectionStr, err := container.ConnectionString(s.ctx, extraArg)
-	s.NoError(err)
-	s.image = container
-	err = container.Start(s.ctx)
-	s.NoError(err)
-
-	db, err := sqlx.ConnectContext(s.ctx, "postgres", connectionStr)
-	s.NoError(err)
-
-	s.appRepository = repository.NewAppRepository(db)
-	s.inputRepository = repository.NewInputRepository(db)
-	s.epochRepository = repository.NewEpochRepository(db)
-
-	s.rpcUrl = fmt.Sprintf("ws://%s:%v", devnet.AnvilDefaultAddress, devnet.AnvilDefaultPort+s.portCounter)
-	ready := make(chan struct{})
-	go func() {
-		s.workerResult <- w.Start(s.workerCtx, ready)
-	}()
-	select {
-	case <-s.ctx.Done():
-		s.Fail("context error", s.ctx.Err())
-	case err := <-s.workerResult:
-		s.Fail("worker exited before being ready", err)
-	case <-ready:
-		s.T().Log("nonodo ready")
-	}
-}
-
 func (s *AvailListenerSuite) TearDownTest() {
-	testcontainers.CleanupContainer(s.T(), s.image.Container)
+	testcontainers.CleanupContainer(s.T(), s.anvilC)
+	testcontainers.CleanupContainer(s.T(), s.postgresC)
 	defer s.timeoutCancel()
 	if s.DbFactory != nil {
 		defer s.DbFactory.Cleanup()
-	}
-	err := exec.Command("pkill", "anvil").Run()
-	s.NoError(err)
-	s.workerCancel()
-	select {
-	case <-s.ctx.Done():
-		s.Fail("context error", s.ctx.Err())
-	case err := <-s.workerResult:
-		s.NoError(err)
 	}
 }
 

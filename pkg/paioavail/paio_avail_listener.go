@@ -240,7 +240,7 @@ func (a AvailListener) TableTennis(stdCtx context.Context,
 	}
 	defer tx.Rollback()
 
-	apps, err := a.InputService.AppRepository.FindAllByDA(ctx, model.DataAvailability_Avail)
+	apps, err := a.InputService.AppRepository.FindAllByDAStatus(ctx, model.DataAvailability_Avail, model.ApplicationState_Enabled)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve applications by avail data availability: %w", err)
 	}

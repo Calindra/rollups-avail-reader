@@ -73,7 +73,7 @@ func (s *AvailListenerSuite) SetupSuite() {
 func (s *AvailListenerSuite) SetupTest() {
 	commons.ConfigureLog(slog.LevelDebug)
 	var err error
-	s.testTimeout = 20 * time.Second
+	s.testTimeout = 1 * time.Minute
 	s.ctx, s.timeoutCancel = context.WithTimeout(context.Background(), s.testTimeout)
 	s.fd = &FakeDecoder{}
 

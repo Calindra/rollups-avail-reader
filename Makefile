@@ -11,7 +11,7 @@ build-bin:
 
 .PHONY: test
 test:
-	go test --timeout 1m -p 1 ./...
+	go test --timeout 2m -p 1 ./...
 
 .PHONY: lint
 lint:

@@ -10,6 +10,325 @@ env:
 
 jobs:
   build:
+    name: Build
+    runs-on: ubuntu-latest
+    env:
+      CARTESI_DATABASE_CONNECTION: 'postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable'
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: rollupsdb
+        options: --name postgres
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Clone Node V2 (avoid submodules)
+        run: |
+          git clone -b v2.0.0-alpha.3 --depth 1 --recurse-submodules https://github.com/cartesi/rollups-node.git
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres; then
+              echo "PostgreSQL is ready";
+              exit 0;
+            fi;
+            sleep 2;
+          done;
+          echo "PostgreSQL did not become ready in time";
+          exit 1;
+
+      - name: Install go migrate cli
+        run: |
+          GO_MIGRATE_VERSION=4.18.2
+          ARCH=$(dpkg --print-architecture || uname -m)
+          case "$ARCH" in
+              amd64|x86_64)
+                  MIGRATE_URL="https://github.com/golang-migrate/migrate/releases/download/v${GO_MIGRATE_VERSION}/migrate.linux-amd64.deb"
+                  ;;
+              arm64|aarch64)
+                  MIGRATE_URL="https://github.com/golang-migrate/migrate/releases/download/v${GO_MIGRATE_VERSION}/migrate.linux-arm64.deb"
+                  ;;
+              armhf|armv7l)
+                  MIGRATE_URL="https://github.com/golang-migrate/migrate/releases/download/v${GO_MIGRATE_VERSION}/migrate.linux-armv7.deb"
+                  ;;
+              i386)
+                  MIGRATE_URL="https://github.com/golang-migrate/migrate/releases/download/v${GO_MIGRATE_VERSION}/migrate.linux-386.deb"
+                  ;;
+              *)
+                  echo "Unsupported architecture: $ARCH"
+                  exit 1
+                  ;;
+          esac
+          curl -fsSL "$MIGRATE_URL" -o /tmp/migrate.deb
+          sudo dpkg -i /tmp/migrate.deb
+          rm /tmp/migrate.deb
+          migrate --version
+
+      - name: Migrate Node V2 DB
+        run: |
+          cd rollups-node
+          eval $(make env)
+          make migrate
+
+      - name: Deps and Cartesi Machine
+        run: |
+          export TARGETARCH=amd64
+          export CARTESI_MACHINE_VERSION=0.19.0
+          sudo apt-get update
+          sudo apt-get install -y libboost-all-dev lua5.4 libslirp0
+          curl -LO https://github.com/cartesi/machine-emulator/releases/download/v0.19.0-alpha3/cartesi-machine-v${CARTESI_MACHINE_VERSION}_${TARGETARCH}.deb
+          sudo dpkg -i ./cartesi-machine-v${CARTESI_MACHINE_VERSION}_${TARGETARCH}.deb
+          rm ./cartesi-machine-v${CARTESI_MACHINE_VERSION}_${TARGETARCH}.deb
+      
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run devnet (Anvil)
+        run: |
+          cd rollups-node
+          make devnet
+          make start-devnet
+      
+      - name: Build Avail Reader image
+        run: |
+          docker build --build-arg TARGETARCH=amd64 -t avail-reader -f ./ci/Dockerfile .
+
+      - name: Dump database
+        env:
+          PGPASSWORD: password
+        run: |
+          pg_dump -h localhost -U postgres -d rollupsdb > rollupsdb-dump.sql
+
+      - name: Save Docker image
+        run: |
+          docker save cartesi/rollups-node-devnet:devel -o docker-devnet-image.tar
+          docker save avail-reader -o docker-avail-reader-image.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: docker-*
+  
+      - name: Upload database dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-dump
+          path: rollupsdb-*
+  
+  e2e_test:
+    name: e2e tests (testnet Paio and Avail)
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: rollupsdb
+        options: --name postgres
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Download DB files
+        uses: actions/download-artifact@v4
+        with:
+          name: db-dump
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres; then
+              echo "PostgreSQL is ready";
+              exit 0;
+            fi;
+            sleep 2;
+          done;
+          echo "PostgreSQL did not become ready in time";
+          exit 1;
+  
+      - name: Restore database
+        env:
+          PGPASSWORD: password
+        run: |
+          psql -h localhost -U postgres -d rollupsdb --port 5432 < rollupsdb-dump.sql
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+  
+      - name: Load Docker image
+        run: |
+          docker load -i docker-devnet-image.tar
+          docker load -i docker-avail-reader-image.tar
+      
+      - name: Run devnet (Anvil)
+        run: |
+          docker run --rm --name devnet -p 8545:8545 -d cartesi/rollups-node-devnet:devel
+      
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Check if Anvil is running
+        run: |
+          for i in {1..10}; do
+            if cast block-number --rpc-url http://localhost:8545; then
+              echo "Anvil is running!"
+              exit 0
+            fi
+            echo "Waiting for Anvil to start..."
+            sleep 2
+          done
+          echo "Anvil did not start in time!" >&2
+          exit 1
+
+      - name: Run Avail Reader image (Default input disabled)
+        env:
+          CARTESI_AUTH_MNEMONIC: ${{ secrets.CARTESI_AUTH_MNEMONIC }}
+          CARTESI_BLOCKCHAIN_HTTP_ENDPOINT: ${{ secrets.CARTESI_BLOCKCHAIN_HTTP_ENDPOINT }}
+          CARTESI_BLOCKCHAIN_WS_ENDPOINT: ${{ secrets.CARTESI_BLOCKCHAIN_WS_ENDPOINT }}
+          CARTESI_DATABASE_CONNECTION: 'postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable'
+        run: |
+          docker run -d --env-file ./ci/.env.nodev2-availlocal \
+            -e CARTESI_DATABASE_CONNECTION=$CARTESI_DATABASE_CONNECTION \
+            --rm --network=host \
+            --name c_avail avail-reader
+          sleep 10
+          docker logs --timestamps c_avail
+
+      - name: Deploy Echo Dapp
+        env:
+          ACCOUNT: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+          PRIVATE_KEY: 'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+          RPC_URL: 'http://localhost:8545'
+        run: |
+          docker exec c_avail cartesi-rollups-cli app deploy -n echo-dapp -t applications/echo-dapp/ -v -D 0x8579fd0c000000000000000000000000b6b39fb3dd926a9e3fbc7a129540eebea3016a6c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d903
+          sleep 10
+          docker logs --timestamps c_avail
+
+      - name: Send input transaction
+        env:
+          SENDER_PRIVATE_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+          TRANSACTION_BASE_URL: http://localhost:8080
+        run: |
+          git clone --recurse-submodules https://github.com/Calindra/nonodo.git
+          cd nonodo/eip712-client-js
+          npm i
+          APP_ADDRESS=0x01e800bbE852aeb27cE65604709134Ea63782c6B INPUT=0xdeadbeefdeadbeef node index.js || true
+          sleep 10
+          docker logs --timestamps c_avail
+
+      - name: Query Database for Output
+        continue-on-error: true
+        id: teststep
+        run: |
+          MAX_RETRIES=30
+          for i in $(seq 1 $MAX_RETRIES); do
+            RESULT=$(docker exec -i postgres psql -U postgres -d rollupsdb -t -c "SELECT * FROM public.output;")
+            if [[ "$RESULT" =~ "deadbeefdeadbeef" ]]; then
+              echo "Result found: $RESULT"
+              exit 0
+            fi
+            echo "Result: $RESULT"
+            echo "Waiting for result... attempt $i"
+            sleep 5
+          done
+          echo "Timeout reached: result not found"
+          docker logs --timestamps c_avail
+          exit 1
+
+      - name: Dump database
+        env:
+          PGPASSWORD: password
+        run: |
+          pg_dump -h localhost -U postgres -d rollupsdb > result-rollupsdb-dump.sql
+
+      - name: Upload database dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-db-dump
+          path: result-rollupsdb-*
+
+      - name: Mark as Failed when db output is failed
+        if: ${{ steps.teststep.outcome == 'failure' }}
+        run: exit 1
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [build_and_test, e2e_test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # TODO: remove in the future unrelated binaries.
+      - name: Download binaries artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cartesi-binaries
+
+      - name: Download DB files
+        uses: actions/download-artifact@v4
+        with:
+          name: db-dump
+
+      - name: Publish Github release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          body_path: CHANGELOG.md
+          files: |
+            cartesi-*
+            rollupsdb-*
+
+  releases-matrix:
+    name: Build binaries for release
+    runs-on: ubuntu-latest
+    needs: [release]
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64, riscv64]
+        exclude:
+          - goarch: arm64
+            goos: windows
+          - goarch: riscv64
+            goos: windows
+          - goarch: riscv64
+            goos: darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: wangyoucao577/go-release-action@v1
+        with:
+          overwrite: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          extra_files: CHANGELOG.md LICENSE README.md
+          binary_name: cartesi-rollups-espresso-reader
+
+  build_and_test:
     name: Build and test
     runs-on: ubuntu-latest
     steps:
@@ -21,7 +340,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.24.2"
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1

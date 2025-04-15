@@ -2,8 +2,10 @@ package paioavail
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"os"
 	"strconv"
 	"time"
@@ -46,7 +48,6 @@ type PaioDecoder interface {
 
 func NewAvailListener(availFromBlock uint64, inputService *services.InputService,
 	w *inputreader.InputReaderWorker, fromBlock uint64, binaryDecoderPathLocation string,
-	applicationAddress string,
 ) supervisor.Worker {
 	var paioDecoder PaioDecoder = paiodecoder.ZzzzHuiDecoder{}
 	if binaryDecoderPathLocation != "" {
@@ -180,9 +181,9 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 						index++
 
 						if latestAvailBlock < uint64(i.Number) {
-							slog.Debug("Avail Catching up", "Chain is at block", i.Number, "fetching block", latestAvailBlock)
+							slog.Info("Avail Catching up", "Chain is at block", i.Number, "fetching block", latestAvailBlock)
 						} else {
-							slog.Debug("Avail", "index", index, "Chain is at block", i.Number, "fetching block", latestAvailBlock)
+							slog.Info("Avail", "index", index, "Chain is at block", i.Number, "fetching block", latestAvailBlock)
 						}
 
 						blockHash, err := client.RPC.Chain.GetBlockHash(latestAvailBlock)
@@ -233,11 +234,13 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 func (a AvailListener) TableTennis(stdCtx context.Context,
 	block *types.SignedBlock, ethClient *ethclient.Client,
 	inputBox *contracts.InputBox, startBlockNumber uint64) (*uint64, error) {
-	ctx, tx, err := a.InputService.StartTransaction(stdCtx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer tx.Rollback()
+	ctx, ctxCancel := context.WithCancel(stdCtx)
+	defer ctxCancel()
+	// ctx, tx, err := a.InputService.StartTransaction(stdCtx)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to start transaction: %w", err)
+	// }
+	// defer tx.Rollback()
 
 	apps, err := a.InputService.AppRepository.FindAllByDA(ctx, model.DataAvailability_Avail)
 	if err != nil {
@@ -285,6 +288,15 @@ func (a AvailListener) TableTennis(stdCtx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	abi, err := contracts.InputsMetaData.GetAbi()
+	if err != nil {
+		slog.Error("Error parsing abi", "err", err)
+		return nil, err
+	}
+	countMap, err := a.InputService.InputRepository.CountMap(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("avail input reader: count map: %w", err)
+	}
 	for i := range inputs {
 		inputExtra := inputs[i]
 		inputExtra.Input.Index = uint64(i) + inputCount
@@ -298,27 +310,48 @@ func (a AvailListener) TableTennis(stdCtx context.Context,
 		if app == nil {
 			slog.Warn("Skipping input",
 				"appContract", inputExtra.AppContract.Hex(),
-				"expected", apps,
-			)
+				"expected", apps)
 			continue
 		}
+		count := countMap[app.ID]
+		inputExtra.Input.Index = uint64(i) + count
+		countMap[app.ID] = count + 1
+
 		// The chainId information does not come in Paio's batch.
 		input := inputExtra.Input
 		input.EpochApplicationID = app.ID
-		err = a.InputService.CreateInput(ctx, input)
+
+		chainID := big.NewInt(0).SetUint64(inputExtra.ChainId)
+		blockNumber := big.NewInt(0).SetUint64(input.BlockNumber)
+		blockTimestamp := big.NewInt(0).SetInt64(inputExtra.BlockTimestamp.Unix())
+		index := big.NewInt(0).SetUint64(input.Index)
+		prevRandao := big.NewInt(0)
+
+		rawData, err := abi.Pack("EvmAdvance", chainID, inputExtra.AppContract, inputExtra.MsgSender, blockNumber, blockTimestamp, prevRandao, index, inputExtra.TransactionData)
+
 		if err != nil {
+			slog.Error("Error packing abi", "err", err)
+			return nil, err
+		}
+
+		input.RawData = rawData
+		if input.TransactionReference == nil {
+			input.TransactionReference = Uint64ToHash(inputExtra.Input.Index)
+		}
+
+		if err = a.InputService.CreateInput(ctx, input); err != nil {
 			return nil, fmt.Errorf("avail input reader: create input: %w", err)
 		}
 		slog.Info("Input saved",
 			"index", input.Index,
 			"appID", input.EpochApplicationID,
-			"payload", input.RawData,
+			"payload", common.Bytes2Hex(input.RawData),
 		)
 	}
 	// Commit the transaction
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
-	}
+	// if err := tx.Commit(); err != nil {
+	// 	return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	// }
 	return &currentL1Block, nil
 }
 
@@ -393,4 +426,10 @@ func ReadInputsFromAvailBlockZzzHui(block *types.SignedBlock) ([]cModel.AdvanceI
 		})
 	}
 	return inputs, nil
+}
+
+func Uint64ToHash(value uint64) *common.Hash {
+	var hash common.Hash
+	binary.BigEndian.PutUint64(hash[0:8], value)
+	return &hash
 }

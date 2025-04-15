@@ -234,13 +234,11 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 func (a AvailListener) TableTennis(stdCtx context.Context,
 	block *types.SignedBlock, ethClient *ethclient.Client,
 	inputBox *contracts.InputBox, startBlockNumber uint64) (*uint64, error) {
-	ctx, ctxCancel := context.WithCancel(stdCtx)
-	defer ctxCancel()
-	// ctx, tx, err := a.InputService.StartTransaction(stdCtx)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to start transaction: %w", err)
-	// }
-	// defer tx.Rollback()
+	ctx, tx, err := a.InputService.StartTransaction(stdCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
 
 	apps, err := a.InputService.AppRepository.FindAllByDA(ctx, model.DataAvailability_Avail)
 	if err != nil {
@@ -349,9 +347,9 @@ func (a AvailListener) TableTennis(stdCtx context.Context,
 		)
 	}
 	// Commit the transaction
-	// if err := tx.Commit(); err != nil {
-	// 	return nil, fmt.Errorf("failed to commit transaction: %w", err)
-	// }
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return &currentL1Block, nil
 }
 

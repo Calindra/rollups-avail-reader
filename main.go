@@ -12,15 +12,14 @@ import (
 	"github.com/calindra/rollups-avail-reader/pkg/paioavail"
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
-	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/services"
 	"github.com/calindra/rollups-base-reader/pkg/supervisor"
 	"github.com/calindra/rollups-base-reader/pkg/transaction"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/lmittmann/tint"
 	_ "github.com/lib/pq"
+	"github.com/lmittmann/tint"
 )
 
 func main() {
@@ -65,10 +64,7 @@ func main() {
 		log.Fatal("Failed to create database instance")
 	}
 
-	inputRepository := repository.NewInputRepository(db)
-	epochRepository := repository.NewEpochRepository(db)
-	appRepository := repository.NewAppRepository(db)
-	inputService := services.NewInputService(inputRepository, epochRepository, appRepository)
+	inputService := services.NewInputService(db)
 
 	paioPath, err := paiodecoder.DownloadPaioDecoderExecutableAsNeeded()
 	if err != nil {
@@ -107,7 +103,7 @@ func main() {
 func CreateDBInstance(cfg *config.Config) *sqlx.DB {
 	var db *sqlx.DB
 	slog.Info("Using PostGres DB ...")
-	
+
 	db = sqlx.MustConnect("postgres", cfg.DatabaseConnection)
 	configureConnectionPool(db, cfg)
 	return db

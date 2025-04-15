@@ -260,12 +260,45 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	s.Equal(103, int(savedInputs.Total))
 
 	// check the input from InputBox
-	s.Equal(101, int(savedInputs.Rows[0].Index))
-	expectPayload := "deadbeef11"
-	s.Equal(expectPayload, common.Bytes2Hex(savedInputs.Rows[0].RawData))
+	firstData := savedInputs.Rows[0]
+	inputMap, err := decodeRawData(firstData.RawData)
+	s.Require().NoError(err)
+	s.NotEmpty(inputMap)
+	payload, ok := inputMap["payload"].([]byte)
+	s.True(ok)
+
+	s.Equal(101, int(firstData.Index))
+	s.Equal("deadbeef11", common.Bytes2Hex(payload))
+
+	secondData := savedInputs.Rows[1]
+	inputMap, err = decodeRawData(secondData.RawData)
+	s.Require().NoError(err)
+	s.NotEmpty(inputMap)
+	payload, ok = inputMap["payload"].([]byte)
+	s.True(ok)
 
 	// check the input from Avail
-	s.Equal("Hello, World?", string(savedInputs.Rows[1].RawData))
+	s.Equal("Hello, World?", string(payload))
+}
+
+func decodeRawData(inputBoxData []byte) (map[string]any, error) {
+	if len(inputBoxData) < 4 {
+		return nil, fmt.Errorf("inputBoxData too short")
+	}
+	inputMap := make(map[string]any)
+	abi, err := contracts.InputsMetaData.GetAbi()
+	if err != nil {
+		return nil, err
+	}
+	methodABI, err := abi.MethodById(inputBoxData[0:4])
+	if err != nil {
+		return nil, err
+	}
+	err = methodABI.Inputs.UnpackIntoMap(inputMap, inputBoxData[4:])
+	if err != nil {
+		return nil, err
+	}
+	return inputMap, nil
 }
 
 type FakeDecoder struct {

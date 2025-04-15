@@ -282,10 +282,6 @@ func (a AvailListener) TableTennis(stdCtx context.Context,
 		slog.Debug("No inputs found for the specified data availability")
 		return &currentL1Block, nil
 	}
-	inputCount, err := a.InputService.InputRepository.Count(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
 	abi, err := contracts.InputsMetaData.GetAbi()
 	if err != nil {
 		slog.Error("Error parsing abi", "err", err)
@@ -297,7 +293,6 @@ func (a AvailListener) TableTennis(stdCtx context.Context,
 	}
 	for i := range inputs {
 		inputExtra := inputs[i]
-		inputExtra.Input.Index = uint64(i) + inputCount
 		var app *model.Application = nil
 		for _, appr := range apps {
 			if inputExtra.AppContract.Hex() == appr.IApplicationAddress.Hex() {

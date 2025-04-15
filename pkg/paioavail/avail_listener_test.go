@@ -136,7 +136,7 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockZzzHui() {
 	*/
 	inputs, err := ReadInputsFromAvailBlockZzzHui(&block)
 	s.NoError(err)
-	s.Equal(1, len(inputs))
+	s.Len(inputs, 1)
 	s.Equal(common.HexToAddress("0xab7528bb862fb57e8a2bcd567a2e929a0be56a5e"), inputs[0].AppContract)
 	s.Equal("GM", string(common.Hex2Bytes(inputs[0].Payload)))
 	s.Equal(common.HexToAddress("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"), inputs[0].MsgSender)
@@ -161,7 +161,7 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
 	}
 	inputs, err := availListener.ReadInputsFromPaioBlock(ctx, &block)
 	s.NoError(err)
-	s.Equal(1, len(inputs))
+	s.Len(inputs, 1)
 }
 
 func (s *AvailListenerSuite) TestTableTennis() {
@@ -236,13 +236,14 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	}
 	inputs, err := availListener.ReadInputsFromPaioBlock(ctx, &block)
 	s.NoError(err)
-	s.Equal(1, len(inputs))
+	s.Len(inputs, 1)
+
 	s.Equal(int64(timestamp)+int64(delta), inputs[0].BlockTimestamp.Unix())
 	availBlockTimestamp := uint64(inputs[0].BlockTimestamp.Unix())
 	inputs, err = inputterWorker.FindAllInputsByBlockAndTimestampLT(ctx, ethClient, inputBox, l1FinalizedPrevHeight, (availBlockTimestamp/1000)-300, appAddresses)
 	s.NoError(err)
 	s.NotNil(inputs)
-	s.Equal(1, len(inputs))
+	s.Len(inputs, 1)
 
 	savedInputsBeforeTableTennis, err := s.inputService.InputRepository.FindAll(ctx, nil, nil, nil, nil, nil)
 	s.NoError(err)

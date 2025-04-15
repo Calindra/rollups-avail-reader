@@ -180,7 +180,7 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	s.NoError(err)
 
 	// check if the DA was updated
-	apps, err = s.inputService.AppRepository.FindAllByDA(ctx, dataavailability)
+	apps, err = s.inputService.AppRepository.FindAllByDAStatus(ctx, dataavailability, model.ApplicationState_Enabled)
 	s.NoError(err)
 	s.Require().NotEmpty(apps)
 	s.Equal(firstDapp.ID, apps[0].ID)

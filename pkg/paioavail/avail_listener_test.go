@@ -282,15 +282,12 @@ func (s *AvailListenerSuite) TestTableTennis() {
 }
 
 func decodeRawData(inputBoxData []byte) (map[string]any, error) {
-	if len(inputBoxData) < 4 {
-		return nil, fmt.Errorf("inputBoxData too short")
-	}
 	inputMap := make(map[string]any)
 	abi, err := contracts.InputsMetaData.GetAbi()
 	if err != nil {
 		return nil, err
 	}
-	methodABI, err := abi.MethodById(inputBoxData[0:4])
+	methodABI, err := abi.MethodById(inputBoxData)
 	if err != nil {
 		return nil, err
 	}

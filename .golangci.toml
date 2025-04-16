@@ -9,7 +9,11 @@ print-issued-lines = true
 colors = true
 
 [linters]
-settings.errcheck.exclude-functions = ["(io.Closer).Close", "(*os.File).Close"]
+settings.errcheck.exclude-functions = [
+    "(io.Closer).Close",
+    "(*os.File).Close",
+    "(*database/sql.Tx).Rollback",
+]
 exclusions.rules = [
     { path = "pkg/paioavail", linters = [
         "staticcheck",

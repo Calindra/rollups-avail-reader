@@ -231,10 +231,16 @@ func (a AvailListener) watchNewTransactions(ctx context.Context, client *gsrpc.S
 	}
 }
 
-func (a AvailListener) TableTennis(ctx context.Context,
+func (a AvailListener) TableTennis(stdCtx context.Context,
 	block *types.SignedBlock, ethClient *ethclient.Client,
 	inputBox *contracts.InputBox, startBlockNumber uint64) (*uint64, error) {
-	apps, err := a.InputService.AppRepository.FindAllByDA(ctx, model.DataAvailability_Avail)
+	ctx, tx, err := a.InputService.StartTransaction(stdCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	apps, err := a.InputService.AppRepository.FindAllByStatusAndDA(ctx, model.DataAvailability_Avail, model.ApplicationState_Enabled)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve applications by avail data availability: %w", err)
 	}
@@ -272,68 +278,72 @@ func (a AvailListener) TableTennis(ctx context.Context,
 		currentL1Block = inputsL1[len(inputsL1)-1].BlockNumber + 1
 	}
 	inputs := append(inputsL1, availInputs...)
+	if len(inputs) == 0 {
+		slog.Debug("No inputs found for the specified data availability")
+		return &currentL1Block, nil
+	}
 	abi, err := contracts.InputsMetaData.GetAbi()
 	if err != nil {
 		slog.Error("Error parsing abi", "err", err)
 		return nil, err
 	}
-	if len(inputs) > 0 {
-		countMap, err := a.InputService.InputRepository.CountMap(ctx)
+	countMap, err := a.InputService.InputRepository.CountMap(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("avail input reader: count map: %w", err)
+	}
+	for i := range inputs {
+		inputExtra := inputs[i]
+		var app *model.Application = nil
+		for _, appr := range apps {
+			if inputExtra.AppContract.Hex() == appr.IApplicationAddress.Hex() {
+				app = &appr
+				break
+			}
+		}
+		if app == nil {
+			slog.Warn("Skipping input",
+				"appContract", inputExtra.AppContract.Hex(),
+				"expected", apps)
+			continue
+		}
+		count := countMap[app.ID]
+		inputExtra.Input.Index = uint64(i) + count
+		countMap[app.ID] = count + 1
+
+		// The chainId information does not come in Paio's batch.
+		input := inputExtra.Input
+		input.EpochApplicationID = app.ID
+
+		chainID := big.NewInt(0).SetUint64(inputExtra.ChainId)
+		blockNumber := big.NewInt(0).SetUint64(input.BlockNumber)
+		blockTimestamp := big.NewInt(0).SetInt64(inputExtra.BlockTimestamp.Unix())
+		index := big.NewInt(0).SetUint64(input.Index)
+		prevRandao := big.NewInt(0)
+
+		rawData, err := abi.Pack("EvmAdvance", chainID, inputExtra.AppContract, inputExtra.MsgSender, blockNumber, blockTimestamp, prevRandao, index, inputExtra.TransactionData)
+
 		if err != nil {
-			return nil, fmt.Errorf("avail input reader: count map: %w", err)
+			slog.Error("Error packing abi", "err", err)
+			return nil, err
 		}
-		for i := range inputs {
-			inputExtra := inputs[i]
-			var app *model.Application = nil
-			for _, appr := range apps {
-				if inputExtra.AppContract.Hex() == appr.IApplicationAddress.Hex() {
-					app = &appr
-					break
-				}
-			}
-			if app == nil {
-				slog.Warn("Skipping input",
-					"appContract", inputExtra.AppContract.Hex(),
-					"expected", apps,
-				)
-				continue
-			}
-			count := countMap[app.ID]
-			inputExtra.Input.Index = uint64(i) + count
-			countMap[app.ID] = count + 1
 
-			// The chainId information does not come in Paio's batch.
-			input := inputExtra.Input
-			input.EpochApplicationID = app.ID
-
-			chainID := big.NewInt(0).SetUint64(inputExtra.ChainId)
-			blockNumber := big.NewInt(0).SetUint64(input.BlockNumber)
-			blockTimestamp := big.NewInt(0).SetInt64(inputExtra.BlockTimestamp.Unix())
-			index := big.NewInt(0).SetUint64(input.Index)
-			prevRandao := big.NewInt(0)
-
-			rawData, err := abi.Pack("EvmAdvance", chainID, inputExtra.AppContract, inputExtra.MsgSender, blockNumber, blockTimestamp, prevRandao, index, inputExtra.TransactionData)
-
-			if err != nil {
-				slog.Error("Error packing abi", "err", err)
-				return nil, err
-			}
-
-			input.RawData = rawData
-			if input.TransactionReference == nil {
-				input.TransactionReference = Uint64ToHash(inputExtra.Input.Index)
-			}
-
-			err = a.InputService.CreateInput(ctx, input)
-			if err != nil {
-				return nil, fmt.Errorf("avail input reader: create input: %w", err)
-			}
-			slog.Info("Input saved",
-				"index", input.Index,
-				"appID", input.EpochApplicationID,
-				"payload", common.Bytes2Hex(input.RawData),
-			)
+		input.RawData = rawData
+		if input.TransactionReference == nil {
+			input.TransactionReference = Uint64ToHash(inputExtra.Input.Index)
 		}
+
+		if err = a.InputService.CreateInput(ctx, input); err != nil {
+			return nil, fmt.Errorf("avail input reader: create input: %w", err)
+		}
+		slog.Info("Input saved",
+			"index", input.Index,
+			"appID", input.EpochApplicationID,
+			"payload", common.Bytes2Hex(input.RawData),
+		)
+	}
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return &currentL1Block, nil
 }

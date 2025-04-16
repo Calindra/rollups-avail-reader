@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,9 +19,7 @@ import (
 	"github.com/calindra/rollups-base-reader/pkg/inputreader"
 	"github.com/calindra/rollups-base-reader/pkg/model"
 	"github.com/calindra/rollups-base-reader/pkg/paiodecoder"
-	"github.com/calindra/rollups-base-reader/pkg/repository"
 	"github.com/calindra/rollups-base-reader/pkg/services"
-	"github.com/calindra/rollups-base-reader/pkg/supervisor"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
@@ -40,20 +37,16 @@ import (
 
 type AvailListenerSuite struct {
 	suite.Suite
-	fd              paiodecoder.DecoderPaio
-	ctx             context.Context
-	workerCtx       context.Context
-	timeoutCancel   context.CancelFunc
-	workerCancel    context.CancelFunc
-	workerResult    chan error
-	rpcUrl          string
-	portCounter     int
-	DbFactory       *commons.DbFactory
-	appRepository   *repository.AppRepository
-	epochRepository *repository.EpochRepository
-	inputRepository *repository.InputRepository
-	image           *postgres.PostgresContainer
-	schemaPath      string
+	testTimeout   time.Duration
+	fd            paiodecoder.DecoderPaio
+	ctx           context.Context
+	timeoutCancel context.CancelFunc
+	rpcUrl        string
+	DbFactory     *commons.DbFactory
+	inputService  *services.InputService
+	anvilC        *devnet.FoundryContainer
+	postgresC     *postgres.PostgresContainer
+	schemaPath    string
 }
 
 func TestAvailListenerSuite(t *testing.T) {
@@ -74,6 +67,45 @@ func (s *AvailListenerSuite) SetupSuite() {
 	defer resp.Body.Close()
 
 	_, err = io.Copy(schemaFile, resp.Body)
+	s.NoError(err)
+}
+
+func (s *AvailListenerSuite) SetupTest() {
+	commons.ConfigureLog(slog.LevelDebug)
+	var err error
+	s.testTimeout = 1 * time.Minute
+	s.ctx, s.timeoutCancel = context.WithTimeout(context.Background(), s.testTimeout)
+	s.fd = &FakeDecoder{}
+
+	// Start Anvil
+	s.anvilC, err = devnet.SetupFoundryStable(s.ctx, testcontainers.WithLogConsumers(&commons.StdoutLogConsumer{}))
+	s.Require().NoError(err)
+	s.NotNil(s.anvilC)
+	err = s.anvilC.Start(s.ctx)
+	s.NoError(err)
+
+	// Database
+	s.postgresC, err = postgres.Run(s.ctx, commons.DbImage,
+		postgres.BasicWaitStrategies(),
+		postgres.WithInitScripts(s.schemaPath),
+		postgres.WithDatabase(commons.DbName),
+		postgres.WithUsername(commons.DbUser),
+		postgres.WithPassword(commons.DbPassword),
+		testcontainers.WithLogConsumers(&commons.StdoutLogConsumer{}),
+	)
+	s.NoError(err)
+	extraArg := "sslmode=disable"
+	connectionStr, err := s.postgresC.ConnectionString(s.ctx, extraArg)
+	s.NoError(err)
+	err = s.postgresC.Start(s.ctx)
+	s.NoError(err)
+
+	db, err := sqlx.ConnectContext(s.ctx, "postgres", connectionStr)
+	s.NoError(err)
+
+	s.inputService = services.NewInputService(db)
+
+	s.rpcUrl, err = s.anvilC.URI(s.ctx)
 	s.NoError(err)
 }
 
@@ -104,13 +136,15 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockZzzHui() {
 	*/
 	inputs, err := ReadInputsFromAvailBlockZzzHui(&block)
 	s.NoError(err)
-	s.Equal(1, len(inputs))
+	s.Len(inputs, 1)
 	s.Equal(common.HexToAddress("0xab7528bb862fb57e8a2bcd567a2e929a0be56a5e"), inputs[0].AppContract)
 	s.Equal("GM", string(common.Hex2Bytes(inputs[0].Payload)))
 	s.Equal(common.HexToAddress("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"), inputs[0].MsgSender)
 }
 
 func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
+	ctx, ctxCancel := context.WithCancel(s.ctx)
+	defer ctxCancel()
 	block := types.SignedBlock{}
 	block.Block = types.Block{}
 	timestampExtrinsic := CreateTimestampExtrinsic()
@@ -125,26 +159,28 @@ func (s *AvailListenerSuite) TestReadInputsFromBlockPaio() {
 			Provider: s.rpcUrl,
 		},
 	}
-	inputs, err := availListener.ReadInputsFromPaioBlock(s.ctx, &block)
+	inputs, err := availListener.ReadInputsFromPaioBlock(ctx, &block)
 	s.NoError(err)
-	s.Equal(1, len(inputs))
+	s.Len(inputs, 1)
 }
 
 func (s *AvailListenerSuite) TestTableTennis() {
+	ctx, ctxCancel := context.WithCancel(s.ctx)
+	defer ctxCancel()
 	dataavailability := model.DataAvailability_Avail
 
 	// List all applications
-	apps, err := s.appRepository.List(s.ctx)
+	apps, err := s.inputService.AppRepository.List(ctx)
 	s.NoError(err)
 	s.Require().NotEmpty(apps)
 
 	// Change DA from application to Avail
 	firstDapp := apps[0]
-	err = s.appRepository.UpdateDA(s.ctx, firstDapp.ID, dataavailability)
+	err = s.inputService.AppRepository.UpdateDA(ctx, firstDapp.ID, dataavailability)
 	s.NoError(err)
 
 	// check if the DA was updated
-	apps, err = s.appRepository.FindAllByDA(s.ctx, dataavailability)
+	apps, err = s.inputService.AppRepository.FindAllByStatusAndDA(ctx, dataavailability, model.ApplicationState_Enabled)
 	s.NoError(err)
 	s.Require().NotEmpty(apps)
 	s.Equal(firstDapp.ID, apps[0].ID)
@@ -161,12 +197,11 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	appAddress := "0x8e3c7bF65833ccb1755dAB530Ef0405644FE6ae3"
 	s.Contains(appAddresses, common.HexToAddress(appAddress))
 
-	ethClient, err := ethclient.DialContext(s.ctx, s.rpcUrl)
+	ethClient, err := ethclient.DialContext(ctx, s.rpcUrl)
 	s.NoError(err)
 	inputBoxAddress := common.HexToAddress(devnet.InputBoxAddress)
 	inputBox, err := contracts.NewInputBox(inputBoxAddress, ethClient)
 	s.NoError(err)
-	ctx := context.Background()
 	err = devnet.AddInput(ctx, s.rpcUrl, common.Hex2Bytes("deadbeef11"), appAddress)
 	s.NoError(err)
 
@@ -193,45 +228,75 @@ func (s *AvailListenerSuite) TestTableTennis() {
 	block.Block.Extrinsics = append(block.Block.Extrinsics, extrinsicPaioBlock)
 
 	var fd paiodecoder.DecoderPaio = &FakeDecoder{}
-	inputService := services.NewInputService(s.inputRepository, s.epochRepository, s.appRepository)
 
 	availListener := AvailListener{
 		PaioDecoder:       fd,
 		InputReaderWorker: &inputterWorker,
-		InputService:      inputService,
+		InputService:      s.inputService,
 	}
 	inputs, err := availListener.ReadInputsFromPaioBlock(ctx, &block)
 	s.NoError(err)
-	s.Equal(1, len(inputs))
+	s.Len(inputs, 1)
+
 	s.Equal(int64(timestamp)+int64(delta), inputs[0].BlockTimestamp.Unix())
 	availBlockTimestamp := uint64(inputs[0].BlockTimestamp.Unix())
 	inputs, err = inputterWorker.FindAllInputsByBlockAndTimestampLT(ctx, ethClient, inputBox, l1FinalizedPrevHeight, (availBlockTimestamp/1000)-300, appAddresses)
 	s.NoError(err)
 	s.NotNil(inputs)
-	s.Equal(1, len(inputs))
+	s.Len(inputs, 1)
 
-	savedInputsBeforeTableTennis, err := s.inputRepository.FindAll(ctx, nil, nil, nil, nil, nil)
+	savedInputsBeforeTableTennis, err := s.inputService.InputRepository.FindAll(ctx, nil, nil, nil, nil, nil)
 	s.NoError(err)
 	s.Equal(101, int(savedInputsBeforeTableTennis.Total))
 
 	startBlock := 0
-	currentL1Block, err := availListener.TableTennis(s.ctx, &block, ethClient, inputBox, uint64(startBlock))
+	currentL1Block, err := availListener.TableTennis(ctx, &block, ethClient, inputBox, uint64(startBlock))
 	s.Require().NoError(err)
 	s.NotNil(currentL1Block)
 
 	// check if TableTennis has saved the data.
 	lastTwoInputs := 2
-	savedInputs, err := s.inputRepository.FindAll(ctx, nil, &lastTwoInputs, nil, nil, nil)
+	savedInputs, err := s.inputService.InputRepository.FindAll(ctx, nil, &lastTwoInputs, nil, nil, nil)
 	s.NoError(err)
 	s.Equal(103, int(savedInputs.Total))
 
 	// check the input from InputBox
-	s.Equal(101, int(savedInputs.Rows[0].Index))
-	expectPayload := "deadbeef11"
-	s.Equal(expectPayload, common.Bytes2Hex(savedInputs.Rows[0].RawData))
+	firstData := savedInputs.Rows[0]
+	inputMap, err := decodeRawData(firstData.RawData)
+	s.Require().NoError(err)
+	s.NotEmpty(inputMap)
+	payload, ok := inputMap["payload"].([]byte)
+	s.True(ok)
+
+	s.Equal(101, int(firstData.Index))
+	s.Equal("deadbeef11", common.Bytes2Hex(payload))
+
+	secondData := savedInputs.Rows[1]
+	inputMap, err = decodeRawData(secondData.RawData)
+	s.Require().NoError(err)
+	s.NotEmpty(inputMap)
+	payload, ok = inputMap["payload"].([]byte)
+	s.True(ok)
 
 	// check the input from Avail
-	s.Equal("Hello, World?", string(savedInputs.Rows[1].RawData))
+	s.Equal("Hello, World?", string(payload))
+}
+
+func decodeRawData(inputBoxData []byte) (map[string]any, error) {
+	inputMap := make(map[string]any)
+	abi, err := contracts.InputsMetaData.GetAbi()
+	if err != nil {
+		return nil, err
+	}
+	methodABI, err := abi.MethodById(inputBoxData)
+	if err != nil {
+		return nil, err
+	}
+	err = methodABI.Inputs.UnpackIntoMap(inputMap, inputBoxData[4:])
+	if err != nil {
+		return nil, err
+	}
+	return inputMap, nil
 }
 
 type FakeDecoder struct {
@@ -271,76 +336,20 @@ func CreateTimestampExtrinsic() types.Extrinsic {
 	}
 }
 
-func (s *AvailListenerSuite) SetupTest() {
-	commons.ConfigureLog(slog.LevelDebug)
-	var w supervisor.SupervisorWorker
-	w.Name = "SupervisorWorker"
-	const testTimeout = 1 * time.Minute
-	s.portCounter += 1
-	s.ctx, s.timeoutCancel = context.WithTimeout(context.Background(), testTimeout)
-	s.workerResult = make(chan error)
-	s.fd = &FakeDecoder{}
-	s.workerCtx, s.workerCancel = context.WithCancel(s.ctx)
-	w.Workers = append(w.Workers, devnet.AnvilWorker{
-		Address:  devnet.AnvilDefaultAddress,
-		Port:     devnet.AnvilDefaultPort + s.portCounter,
-		Verbose:  true,
-		AnvilCmd: "anvil",
-	})
-
-	// Database
-	container, err := postgres.Run(s.ctx, commons.DbImage,
-		postgres.BasicWaitStrategies(),
-		postgres.WithInitScripts(s.schemaPath),
-		postgres.WithDatabase(commons.DbName),
-		postgres.WithUsername(commons.DbUser),
-		postgres.WithPassword(commons.DbPassword),
-		testcontainers.WithLogConsumers(&commons.StdoutLogConsumer{}),
-	)
-	s.NoError(err)
-	extraArg := "sslmode=disable"
-	connectionStr, err := container.ConnectionString(s.ctx, extraArg)
-	s.NoError(err)
-	s.image = container
-	err = container.Start(s.ctx)
-	s.NoError(err)
-
-	db, err := sqlx.ConnectContext(s.ctx, "postgres", connectionStr)
-	s.NoError(err)
-
-	s.appRepository = repository.NewAppRepository(db)
-	s.inputRepository = repository.NewInputRepository(db)
-	s.epochRepository = repository.NewEpochRepository(db)
-
-	s.rpcUrl = fmt.Sprintf("ws://%s:%v", devnet.AnvilDefaultAddress, devnet.AnvilDefaultPort+s.portCounter)
-	ready := make(chan struct{})
-	go func() {
-		s.workerResult <- w.Start(s.workerCtx, ready)
-	}()
-	select {
-	case <-s.ctx.Done():
-		s.Fail("context error", s.ctx.Err())
-	case err := <-s.workerResult:
-		s.Fail("worker exited before being ready", err)
-	case <-ready:
-		s.T().Log("nonodo ready")
-	}
-}
-
 func (s *AvailListenerSuite) TearDownTest() {
+	testcontainers.CleanupContainer(s.T(), s.anvilC)
+	testcontainers.CleanupContainer(s.T(), s.postgresC)
+	defer s.timeoutCancel()
 	if s.DbFactory != nil {
 		defer s.DbFactory.Cleanup()
 	}
-	err := exec.Command("pkill", "anvil").Run()
+}
+
+func (s *AvailListenerSuite) TearDownSuite() {
+	// Remove schema
+	parentPath := filepath.Dir(s.schemaPath)
+	err := os.RemoveAll(parentPath)
 	s.NoError(err)
-	s.workerCancel()
-	select {
-	case <-s.ctx.Done():
-		s.Fail("context error", s.ctx.Err())
-	case err := <-s.workerResult:
-		s.NoError(err)
-	}
-	s.timeoutCancel()
 }
 
 // nolint
